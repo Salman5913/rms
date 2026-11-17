@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(php artisan migrate:*)",
+      "Bash(php artisan db:seed:*)",
+      "Bash(php artisan tinker:*)",
+      "Bash(php artisan db:*)",
+      "Bash(mysql:*)",
+      "Bash(psql:*)",
+      "Bash(sqlite3:*)"
+    ],
+    "deny": [
+      "Bash(php artisan migrate:fresh:*)",
+      "Bash(php artisan migrate:refresh:*)",
+      "Bash(php artisan migrate:reset:*)",
+      "Bash(php artisan db:wipe:*)",
+      "Read(./.env)",
+      "Read(./vendor/**)",
+      "Read(./storage/**)",
+      "Read(./bootstrap/cache/**)",
+      "Read(./.env)",
+      "Read(./node_modules/**)",
+    ]
+  }
+}
