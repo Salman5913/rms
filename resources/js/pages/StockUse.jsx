@@ -143,7 +143,7 @@ export default function StockUse() {
                     {canCreate && <Btn
                         onClick={save}
                         disabled={saving}
-                        className="w-full justify-center py-3 bg-[#161B2E] border border-[#161B2E] text-white hover:bg-[#232a44] hover:border-[#232a44] disabled:opacity-50"
+                        className="w-full justify-center py-3 bg-brand-600 border border-brand-600 text-white hover:bg-brand-700 hover:border-brand-700 disabled:opacity-50"
                     >
                         {saving ? "Saving…" : "Save Voucher"}
                     </Btn>}
@@ -151,7 +151,7 @@ export default function StockUse() {
                         onClick={() => nav("/stock-items")}
                         className="w-full justify-center py-3 bg-transparent border border-[#161B2E] text-[#161B2E] hover:bg-slate-100"
                     >
-                        ← Back
+                        Back
                     </Btn>
                 </aside>
             </div>

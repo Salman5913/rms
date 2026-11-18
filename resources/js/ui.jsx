@@ -309,3 +309,20 @@ export function Pagination({ data, onPage }) {
         </div>
     );
 }
+
+/** Centered modal card with a title, close button, body and optional footer (for small forms). */
+export function Modal({ title, onClose, children, footer, className = "max-w-md" }) {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={onClose} />
+            <div className={"relative bg-white rounded-2xl shadow-2xl w-full p-6 " + className}>
+                <div className="flex justify-between items-start mb-4">
+                    <h3 className="font-bold text-slate-800">{title}</h3>
+                    <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+                </div>
+                {children}
+                {footer && <div className="flex justify-end gap-2 mt-6">{footer}</div>}
+            </div>
+        </div>
+    );
+}

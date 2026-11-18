@@ -65,7 +65,9 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    // the restaurant's local time: business days (dashboard, daily close, reports, exports)
+    // run midnight to midnight Pakistan time
+    'timezone' => 'Asia/Karachi',
 
     /*
     |--------------------------------------------------------------------------

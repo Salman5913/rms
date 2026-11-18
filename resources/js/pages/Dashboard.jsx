@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import api from "../api";
+import { useAuth } from "../auth";
 import { Btn } from "../ui";
+import { localToday as today } from "../utils";
 
 const ACCENTS = ["!border-t-brand-600", "!border-t-emerald-500", "!border-t-amber-400", "!border-t-sky-500", "!border-t-rose-400", "!border-t-violet-500", "!border-t-teal-500", "!border-t-orange-400"];
-const today = () => new Date().toISOString().slice(0, 10);
 
 function LineChart({ labels, series }) {
     const W = 640, H = 220, P = 30;
@@ -27,6 +29,7 @@ export default function Dashboard() {
     const [from, setFrom] = useState(today());
     const [to, setTo] = useState(today());
     const [d, setD] = useState(null);
+    const { can } = useAuth();
 
     useEffect(() => {
         api.get("/admin/dashboard", { params: { from, to } }).then((r) => setD(r.data));
@@ -57,6 +60,9 @@ export default function Dashboard() {
                     <span className="text-slate-400">→</span>
                     <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="border rounded-xl px-3 py-2 text-sm" />
                     <Btn onClick={() => { setFrom(today()); setTo(today()); }} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Today</Btn>
+                    {can("daily-close") && (
+                        <Link to="/daily-close" className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl transition bg-brand-600 hover:bg-brand-700 text-white">Daily Close</Link>
+                    )}
                 </div>
             </div>
 

@@ -49,3 +49,10 @@ export const formatDateTime = (value) => {
     const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
     return `${date}, ${time}`;
 };
+
+/** today's date in the browser's timezone (not UTC) as YYYY-MM-DD */
+export const localToday = () => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+};

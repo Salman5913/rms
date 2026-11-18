@@ -101,13 +101,21 @@ export default function DineInOrders() {
 
     const bulkDelete = async () => {
         if (!selected.length || !(await dialog.confirm(`Delete ${selected.length} record(s)? This can't be undone.`, { title: "Delete records", okText: "Delete" }))) return;
-        await api.post(`/admin/orders-bulk-delete`, { ids: selected });
-        setSelected([]); load();
+        try {
+            await api.post(`/admin/orders-bulk-delete`, { ids: selected });
+            setSelected([]); load();
+        } catch (err) {
+            dialog.alert(err.response?.data?.message ?? "The records could not be deleted. Try again.", { title: "Can't delete", variant: "warning" });
+        }
     };
 
     const destroy = async (id) => {
         if (!(await dialog.confirm("This record will be permanently deleted. This can't be undone.", { title: "Delete this record?", okText: "Delete" }))) return;
-        await api.delete(`/admin/orders/${id}`); load();
+        try {
+            await api.delete(`/admin/orders/${id}`); load();
+        } catch (err) {
+            dialog.alert(err.response?.data?.message ?? "The record could not be deleted. Try again.", { title: "Can't delete", variant: "warning" });
+        }
     };
     const rows = data?.data ?? [];
     const allChecked = rows.length > 0 && rows.every((r) => selected.includes(r.id));
@@ -510,7 +518,7 @@ export function DineInCreate() {
             setQ(""); // optional: also clear the search
         } catch (err) {
             console.error(err);
-            dialog.alert("The order could not be placed. Try again.", { title: "Order failed", variant: "danger" });
+            dialog.alert(err.response?.data?.message ?? "The order could not be placed. Try again.", { title: "Order failed", variant: "danger" });
         }
     };
 
@@ -556,7 +564,7 @@ export function DineInCreate() {
                             className={inputCls + " !w-64"}
                         />
                         <Btn onClick={() => nav("/orders/dinein")} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">
-                            ← Back
+                            Back
                         </Btn>
                     </div>
                 </div>

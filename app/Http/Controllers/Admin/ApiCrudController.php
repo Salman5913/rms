@@ -17,8 +17,11 @@ abstract class ApiCrudController extends Controller
     use FiltersByDateRange;
 
     protected string $model;
+
     protected array $search = ['name'];
+
     protected array $rules = [];
+
     protected array $with = [];
 
     abstract protected function syncRelations($model, array $data): void;
@@ -26,6 +29,7 @@ abstract class ApiCrudController extends Controller
     public function index(Request $request)
     {
         $q = $this->model::query()->with($this->with);
+        $this->filter($q, $request);
 
         if ($s = $request->query('search')) {
             $q->where(function ($qq) use ($s) {
@@ -64,8 +68,10 @@ abstract class ApiCrudController extends Controller
         $model = DB::transaction(function () use ($data) {
             $m = $this->model::create($this->fields($data));
             $this->syncRelations($m, $data);
+
             return $m;
         });
+
         return response()->json($this->model::with($this->with)->find($model->id), 201);
     }
 
@@ -77,12 +83,14 @@ abstract class ApiCrudController extends Controller
             $model->update($this->fields($data));
             $this->syncRelations($model, $data);
         });
+
         return response()->json($this->model::with($this->with)->find($model->id));
     }
 
     public function destroy($id)
     {
         $this->model::findOrFail($id)->delete();
+
         return response()->json(['ok' => true]);
     }
 
@@ -90,14 +98,17 @@ abstract class ApiCrudController extends Controller
     {
         $ids = $request->validate(['ids' => 'required|array'])['ids'];
         $this->model::whereIn('id', $ids)->delete();
+
         return response()->json(['ok' => true, 'deleted' => count($ids)]);
     }
-
 
     protected function rules(Request $request, $model = null): array
     {
         return $this->rules;
     }
+
+    /** extra list filters from the query string (none by default) */
+    protected function filter($query, Request $request): void {}
 
     /** pick only fillable fields present in validated data */
     protected function fields(array $data): array
@@ -109,7 +120,11 @@ abstract class ApiCrudController extends Controller
     {
         $callback = function () use ($rows) {
             $out = fopen('php://output', 'w');
-            if ($rows->isEmpty()) { fclose($out); return; }
+            if ($rows->isEmpty()) {
+                fclose($out);
+
+                return;
+            }
             fputcsv($out, array_keys($rows->first()->getAttributes()));
             foreach ($rows as $r) {
                 fputcsv($out, collect($r->getAttributes())->map(
@@ -118,6 +133,7 @@ abstract class ApiCrudController extends Controller
             }
             fclose($out);
         };
+
         return response()->streamDownload($callback, $fileName, [
             'Content-Type' => 'text/csv',
         ]);

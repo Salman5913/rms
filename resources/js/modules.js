@@ -28,6 +28,8 @@ export const MODULE_GROUPS = [
             { key: "stock-use", label: "Stock Use Voucher", path: "/stock-use" },
         ],
     },
+    { label: "Labour", modules: [{ key: "labours", label: "Labour", path: "/labours" }] },
+    { label: "Reports", modules: [{ key: "daily-close", label: "Daily Close", path: "/daily-close" }] },
     { label: "Users", modules: [{ key: "users", label: "Users", path: "/users" }] },
     { label: "Roles", modules: [{ key: "roles", label: "Roles", path: "/roles" }] },
 ];

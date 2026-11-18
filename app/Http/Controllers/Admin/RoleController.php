@@ -22,6 +22,8 @@ class RoleController extends ApiCrudController
         'categories', 'deals', 'delivery-areas',
         'pickup-orders', 'website-orders', 'dinein-orders', 'delivery-orders',
         'stock-items', 'stock-use',
+        'labours',
+        'daily-close',
         'users', 'roles',
     ];
 

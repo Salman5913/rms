@@ -131,6 +131,12 @@ export const printInvoice = (order, cartSnapshot) => {
     });
 
     const charges = Number(order.delivery_charges) || 0;
+    // free-text customer fields go into the invoice HTML, so escape them
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const line = (label, v) => (v ? `<div><b>${label}:</b> ${esc(v)}</div>` : "");
+    const deliveryMeta = order.type === "delivery"
+        ? line("Customer", order.customer_name) + line("Phone", order.customer_phone) + line("Address", order.address)
+        : "";
     const orderTotal = cartSnapshot.reduce(
         (s, l) => s + l.unit_price * (Number(l.qty) || 0),
         0
@@ -255,7 +261,9 @@ export const printInvoice = (order, cartSnapshot) => {
 
 <div class="meta">
     <div><b>Bill Date:</b> ${billDate}</div>
+    ${deliveryMeta}
     ${order.delivery_area ? `<div><b>Delivery Area:</b> ${order.delivery_area}</div>` : ""}
+    ${order.type === "delivery" ? line("Rider", order.rider_name) : ""}
 </div>
 
 <hr/>
@@ -273,15 +281,15 @@ export const printInvoice = (order, cartSnapshot) => {
     <span>Rs. ${orderTotal.toFixed(2)}</span>
 </div>
 
+<div class="total-row">
+    <span>TOTAL</span>
+    <span>Rs. ${orderTotal.toFixed(2)}</span>
+</div>
+
 ${charges > 0 ? `<div class="summary-row">
     <span>Delivery Charges</span>
     <span>Rs. ${charges.toFixed(2)}</span>
 </div>` : ""}
-
-<div class="total-row">
-    <span>TOTAL</span>
-    <span>Rs. ${(orderTotal + charges).toFixed(2)}</span>
-</div>
 
 <hr/>
 
@@ -382,13 +390,21 @@ export default function PickupOrders() {
 
     const bulkDelete = async () => {
         if (!selected.length || !(await dialog.confirm(`Delete ${selected.length} record(s)? This can't be undone.`, { title: "Delete records", okText: "Delete" }))) return;
-        await api.post(`/admin/orders-bulk-delete`, { ids: selected });
-        setSelected([]); load();
+        try {
+            await api.post(`/admin/orders-bulk-delete`, { ids: selected });
+            setSelected([]); load();
+        } catch (err) {
+            dialog.alert(err.response?.data?.message ?? "The records could not be deleted. Try again.", { title: "Can't delete", variant: "warning" });
+        }
     };
 
     const destroy = async (id) => {
         if (!(await dialog.confirm("This record will be permanently deleted. This can't be undone.", { title: "Delete this record?", okText: "Delete" }))) return;
-        await api.delete(`/admin/orders/${id}`); load();
+        try {
+            await api.delete(`/admin/orders/${id}`); load();
+        } catch (err) {
+            dialog.alert(err.response?.data?.message ?? "The record could not be deleted. Try again.", { title: "Can't delete", variant: "warning" });
+        }
     };
     const rows = data?.data ?? [];
     const allChecked = rows.length > 0 && rows.every((r) => selected.includes(r.id));
@@ -600,7 +616,7 @@ export function PickupCreate() {
             setQ(""); // optional: also clear the search
         } catch (err) {
             console.error(err);
-            dialog.alert("The order could not be placed. Try again.", { title: "Order failed", variant: "danger" });
+            dialog.alert(err.response?.data?.message ?? "The order could not be placed. Try again.", { title: "Order failed", variant: "danger" });
         }
     };
 
@@ -646,7 +662,7 @@ export function PickupCreate() {
                             className={inputCls + " !w-64"}
                         />
                         <Btn onClick={() => nav("/orders/pickup")} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">
-                            ← Back
+                            Back
                         </Btn>
                     </div>
                 </div>

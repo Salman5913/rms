@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Helpers\ImportHelper;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ImportFileRequest;
+use App\Http\Requests\LabourRequest;
 use App\Models\Category;
 use App\Models\Deal;
 use App\Models\DeliveryArea;
 use App\Models\Extra;
+use App\Models\Labour;
 use App\Models\Option;
 use App\Models\Product;
 use App\Models\Role;
@@ -63,6 +65,11 @@ class ImportController extends Controller
         return $this->run($request, StockItem::class, $this->stockItemConfig());
     }
 
+    public function labours(ImportFileRequest $request)
+    {
+        return $this->run($request, Labour::class, $this->labourConfig());
+    }
+
     public function users(ImportFileRequest $request)
     {
         return $this->run($request, User::class, $this->userConfig());
@@ -83,6 +90,7 @@ class ImportController extends Controller
             'deals' => [$this->dealConfig(), ['name' => 'Family Deal', 'description' => '2 burgers + fries', 'price' => '1500', 'products' => '1|3', 'status' => '1']],
             'delivery-areas' => [$this->deliveryAreaConfig(), ['name' => 'Gulberg', 'delivery_charges' => '150', 'status' => '1']],
             'stock-items' => [$this->stockItemConfig(), ['name' => 'Flour', 'unit' => 'kg', 'value' => '25']],
+            'labours' => [$this->labourConfig(), ['name' => 'Bilal', 'phone' => '03001234567', 'cnic' => '35202-1234567-1', 'user_type' => 'rider', 'pay_type' => 'monthly', 'pay_rate' => '30000', 'status' => '1']],
             'users' => [$this->userConfig(), ['name' => 'Ali', 'email' => 'ali@example.com', 'password' => 'secret123', 'role_id' => '1', 'status' => '1']],
             'roles' => [$this->roleConfig(), ['name' => 'Cashier', 'code' => 'cashier', 'status' => '1']],
         ];
@@ -242,6 +250,21 @@ class ImportController extends Controller
                 'name' => 'required|string|max:255',
                 'unit' => 'required|in:kg,number,dozen,packs,mann',
                 'value' => 'required|numeric|min:0',
+            ],
+        ];
+    }
+
+    /** same rules as the Labour form; user_type: rider|cook|waiter|cleaner|manager|other, pay_type: monthly|weekly|daily */
+    private function labourConfig(): array
+    {
+        return [
+            'columns' => ['name', 'phone', 'cnic', 'user_type', 'pay_type', 'pay_rate', 'status'],
+            'booleans' => ['status'],
+            'rules' => (new LabourRequest)->rules(),
+            'prepare' => fn (array $r) => [
+                ...collect($r)->only(['name', 'phone', 'cnic', 'user_type', 'pay_type'])->all(),
+                'pay_rate' => $r['pay_rate'] ?? 0,
+                'status' => $r['status'] ?? true,
             ],
         ];
     }

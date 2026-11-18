@@ -7,6 +7,7 @@ import { formatDateTime } from "../utils";
 import ExportModal from "../ExportModal";
 import { useDialog } from "../Dialog";
 import { useAuth } from "../auth";
+import { CustomerCard, DeliveryStatusSelect, RiderSelect, emptyCustomer, missingCustomerField, useRiders } from "../delivery";
 
 const rs = (v) => `Rs. ${Number(v).toLocaleString()}`;
 
@@ -23,19 +24,28 @@ export default function HomeDeliveryOrders() {
     const dialog = useDialog();
     const [selected, setSelected] = useState([]);
     const [exportOpen, setExportOpen] = useState(false);
+    const riders = useRiders();
 
     const toggleAll = (e) => setSelected(e.target.checked ? data.data.map((r) => r.id) : []);
     const toggleOne = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
     const bulkDelete = async () => {
         if (!selected.length || !(await dialog.confirm(`Delete ${selected.length} record(s)? This can't be undone.`, { title: "Delete records", okText: "Delete" }))) return;
-        await api.post(`/admin/orders-bulk-delete`, { ids: selected });
-        setSelected([]); load();
+        try {
+            await api.post(`/admin/orders-bulk-delete`, { ids: selected });
+            setSelected([]); load();
+        } catch (err) {
+            dialog.alert(err.response?.data?.message ?? "The records could not be deleted. Try again.", { title: "Can't delete", variant: "warning" });
+        }
     };
 
     const destroy = async (id) => {
         if (!(await dialog.confirm("This record will be permanently deleted. This can't be undone.", { title: "Delete this record?", okText: "Delete" }))) return;
-        await api.delete(`/admin/orders/${id}`); load();
+        try {
+            await api.delete(`/admin/orders/${id}`); load();
+        } catch (err) {
+            dialog.alert(err.response?.data?.message ?? "The record could not be deleted. Try again.", { title: "Can't delete", variant: "warning" });
+        }
     };
     const rows = data?.data ?? [];
     const allChecked = rows.length > 0 && rows.every((r) => selected.includes(r.id));
@@ -56,7 +66,7 @@ export default function HomeDeliveryOrders() {
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <h2 className="text-xl font-extrabold text-slate-800">Home Delivery Orders</h2>
                 <div className="flex gap-2">
-                    <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order # / customer…" className={inputCls + " !w-64"} />
+                    <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order # / customer / phone / address…" className={inputCls + " !w-64"} />
                     <Btn onClick={() => setExportOpen(true)} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">
                         <Ico n="download" /> Export
                     </Btn>
@@ -71,28 +81,38 @@ export default function HomeDeliveryOrders() {
                     <thead>
                         <tr className="text-left text-slate-500 bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wide">
                             <th className="p-3 w-10"><input type="checkbox" checked={allChecked} onChange={toggleAll} className="accent-brand-600" /></th>
-                            <th className="p-3 font-semibold">Order #</th>
+                            <th className="p-3 font-semibold whitespace-nowrap">Order #</th>
+                            <th className="p-3 font-semibold">Customer</th>
                             <th className="p-3 font-semibold">Items</th>
-                            <th className="p-3 font-semibold">Delivery Area</th>
-                            <th className="p-3 font-semibold">Order Amount</th>
-                            <th className="p-3 font-semibold">Delivery Charges</th>
+                            <th className="p-3 font-semibold whitespace-nowrap">Delivery Area</th>
                             <th className="p-3 font-semibold">Total</th>
-                            <th className="p-3 font-semibold">Order Date</th>
-                            <th className="p-3 w-20 text-right">Actions</th>
+                            <th className="p-3 font-semibold whitespace-nowrap">Delivery Charges</th>
+                            <th className="p-3 font-semibold">Rider</th>
+                            <th className="p-3 font-semibold">Status</th>
+                            <th className="p-3 font-semibold whitespace-nowrap">Order Date</th>
+                            {/* pinned so the action buttons stay visible when the table scrolls sideways */}
+                            <th className="p-3 text-right sticky right-0 bg-slate-50 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {data.data.map((o) => (
-                            <tr key={o.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
+                            <tr key={o.id} className="group border-b border-slate-100 last:border-0 hover:bg-slate-50">
                                 <td className="p-3"><input type="checkbox" checked={selected.includes(o.id)} onChange={() => toggleOne(o.id)} className="accent-brand-600" /></td>
-                                <td className="p-3 font-semibold">{o.order_number}</td>
-                                <td className="p-3 font-semibold">{o.items?.map((i) => `${i.name} (${i.qty})`)?.join(' , ')}</td>
-                                <td className="p-3">{o.delivery_area ?? "—"}</td>
-                                <td className="p-3">{rs(o.total - o.delivery_charges)}</td>
-                                <td className="p-3">{rs(o.delivery_charges)}</td>
-                                <td className="p-3 font-bold">{rs(o.total)}</td>
-                                <td className="p-3 text-slate-400 text-xs">{formatDateTime(o.created_at)}</td>
-                                <td className="p-3 text-right">
+                                <td className="p-3 font-semibold whitespace-nowrap">{o.order_number}</td>
+                                {/* name, phone and address stacked in one column */}
+                                <td className="p-3 min-w-[180px] max-w-[240px]">
+                                    <span className="block font-semibold text-slate-700 truncate" title={o.customer_name ?? ""}>{o.customer_name ?? "—"}</span>
+                                    {o.customer_phone && <span className="block text-xs text-slate-500 whitespace-nowrap">{o.customer_phone}</span>}
+                                    {o.address && <span className="block text-xs text-slate-400 truncate" title={o.address}>{o.address}</span>}
+                                </td>
+                                <td className="p-3 min-w-[200px] max-w-[280px] text-slate-700">{o.items?.map((i) => `${i.name} (${i.qty})`)?.join(", ")}</td>
+                                <td className="p-3 min-w-[120px]">{o.delivery_area ?? "—"}</td>
+                                <td className="p-3 whitespace-nowrap font-bold text-slate-800">{rs(o.total)}</td>
+                                <td className="p-3 whitespace-nowrap">{rs(o.delivery_charges)}</td>
+                                <td className="p-3"><RiderSelect order={o} riders={riders} disabled={!allowEdit} onChanged={() => load()} /></td>
+                                <td className="p-3"><DeliveryStatusSelect order={o} disabled={!allowEdit} onChanged={() => load()} /></td>
+                                <td className="p-3 text-slate-400 text-xs whitespace-nowrap">{formatDateTime(o.created_at)}</td>
+                                <td className="p-3 text-right sticky right-0 bg-white group-hover:bg-slate-50 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">
                                     <div className="flex justify-end gap-1.5">
                                         <Link to={`/orders/${o.id}`} className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center"><Ico n="eye" /></Link>
                                         {allowEdit && <Link to={`/orders/${o.id}/edit`} title="Edit" className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center"><Ico n="edit" /></Link>}
@@ -101,7 +121,7 @@ export default function HomeDeliveryOrders() {
                                 </td>
                             </tr>
                         ))}
-                        {data.data.length === 0 && <tr><td colSpan={9} className="p-10 text-center text-slate-300">No home delivery orders yet</td></tr>}
+                        {data.data.length === 0 && <tr><td colSpan={11}className="p-10 text-center text-slate-300">No home delivery orders yet</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -130,6 +150,8 @@ export function HomeDeliveryCreate() {
     const [cart, setCart] = useState([]);
     const [modal, setModal] = useState(null);
     const [placing, setPlacing] = useState(false);
+    const [customer, setCustomer] = useState(emptyCustomer);
+    const riders = useRiders();
     const nav = useNavigate();
     const dialog = useDialog();
 
@@ -177,13 +199,15 @@ export function HomeDeliveryCreate() {
 
     const area = areas.find((a) => a.id === areaId);
     const charges = Number(area?.delivery_charges ?? 0);
-    const subtotal = cart.reduce((s, l) => s + l.unit_price * (Number(l.qty) || 0), 0);
-    const total = subtotal + charges;
-    const canPlace = cart.length > 0 && !!area && !placing;
+    // total is the order amount only; delivery charges are shown separately
+    const total = cart.reduce((s, l) => s + l.unit_price * (Number(l.qty) || 0), 0);
+    const missing = missingCustomerField(customer);
+    const canPlace = cart.length > 0 && !!area && !missing && !placing;
 
     const place = async (print = false) => {
         if (!cart.length) return dialog.alert("Add at least one item to the cart before placing the order.", { title: "Cart is empty", variant: "warning" });
         if (!area) return dialog.alert("Select a delivery area before placing the order.", { title: "Delivery area required", variant: "warning" });
+        if (missing) return dialog.alert(missing[1], { title: missing[0], variant: "warning" });
 
         const cartSnapshot = cart.map((l) => ({ ...l }));
         setPlacing(true);
@@ -191,12 +215,14 @@ export function HomeDeliveryCreate() {
             const r = await api.post("/admin/orders", {
                 type: "delivery",
                 delivery_area_id: area.id,
+                ...customer,
                 items: cart.map(({ key, ...l }) => l),
             });
             if (print) printInvoice(r.data, cartSnapshot);
             setCart([]);
             setQ("");
             setAreaId(null);
+            setCustomer(emptyCustomer);
         } catch (err) {
             console.error(err);
             dialog.alert(err.response?.data?.message ?? "The order could not be placed. Try again.", { title: "Order failed", variant: "danger" });
@@ -232,11 +258,8 @@ export function HomeDeliveryCreate() {
                     </div>
                     <div className="flex items-center gap-2">
                         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Search menu…" className={inputCls + " !w-64"} />
-                        <Select value={areaId} onChange={setAreaId} placeholder="Select delivery area"
-                            options={areas.map((a) => ({ value: a.id, label: `${a.name} (${rs(a.delivery_charges)})` }))}
-                            className="w-64" />
                         <Btn onClick={() => nav("/orders/delivery")} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">
-                            ← Back
+                            Back
                         </Btn>
                     </div>
                 </div>
@@ -244,8 +267,14 @@ export function HomeDeliveryCreate() {
                 <CategoryMenu items={items} onAdd={add} forceOpen={!!q} cart={cart} onQty={updateQty} onQtyBlur={onQtyBlur} />
             </div>
 
-            {/* ---------- order summary sidebar ---------- */}
-            <aside className="w-[360px] flex-none sticky top-24 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col max-h-[calc(100vh-8rem)]">
+            {/* ---------- sidebar: customer details + order summary (scroll together) ---------- */}
+            <aside className="w-[360px] flex-none sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto space-y-4 pb-1">
+                <CustomerCard value={customer} onChange={setCustomer} riders={riders}
+                    areaSelect={<Select value={areaId} onChange={(v) => setAreaId(v === "" || v == null ? null : Number(v))}
+                        placeholder="Select delivery area"
+                        options={areas.map((a) => ({ value: a.id, label: `${a.name} (${rs(a.delivery_charges)})` }))} />} />
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col">
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                     <h3 className="font-bold text-slate-800">Order summary</h3>
                     <span className="text-xs font-semibold bg-brand-50 text-brand-700 rounded-full px-2.5 py-1">
@@ -253,7 +282,7 @@ export function HomeDeliveryCreate() {
                     </span>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-5 py-2 min-h-[120px]">
+                <div className="px-5 py-2 min-h-[120px]">
                     {cart.length === 0 && (
                         <div className="text-center text-slate-300 py-10">
                             <p className="text-3xl mb-2">🛒</p>
@@ -292,17 +321,15 @@ export function HomeDeliveryCreate() {
                 </div>
 
                 <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/60 rounded-b-2xl">
-                    <div className="flex justify-between text-sm text-slate-500 mb-1">
-                        <span>Subtotal</span><span>{rs(subtotal)}</span>
+                    <div className="flex justify-between font-extrabold text-slate-800 text-lg mb-1">
+                        <span>Total</span><span>{rs(total)}</span>
                     </div>
-                    <div className="flex justify-between text-sm text-slate-500 mb-1">
+                    <div className="flex justify-between text-sm text-slate-500 mb-4">
                         <span>Delivery Charges{area ? ` (${area.name})` : ""}</span>
                         <span>{area ? rs(charges) : "—"}</span>
                     </div>
-                    <div className="flex justify-between font-extrabold text-slate-800 text-lg mb-4">
-                        <span>Total</span><span>{rs(total)}</span>
-                    </div>
                     {!area && <p className="text-xs text-amber-600 mb-2">Select a delivery area to place the order.</p>}
+                    {missing && <p className="text-xs text-amber-600 mb-2">Fill in the customer's name, phone and address to place the order.</p>}
                     <Btn onClick={() => place()} disabled={!canPlace}
                         className="w-full bg-brand-600 text-white hover:bg-brand-700 justify-center py-3 disabled:opacity-40">
                         Place Order
@@ -311,6 +338,7 @@ export function HomeDeliveryCreate() {
                         className="w-full mt-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 justify-center py-3 disabled:opacity-40">
                         Print
                     </Btn>
+                </div>
                 </div>
             </aside>
 

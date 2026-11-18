@@ -17,11 +17,13 @@ import StockItems from "./pages/StockItems";
 import StockUse from "./pages/StockUse";
 import Users from "./pages/Users";
 import Roles from "./pages/Roles";
+import Labours from "./pages/Labours";
 import WebsiteOrders, { WebsiteOrderView } from "./pages/WebsiteOrders";
 import PickupOrders, { PickupCreate } from "./pages/PickupOrders";
 import DineinOrders, { DineInCreate } from "./pages/DineinOrders";
 import HomeDeliveryOrders, { HomeDeliveryCreate } from "./pages/HomeDeliveryOrders";
 import OrderEdit from "./pages/OrderEdit";
+import DailyClose from "./pages/DailyClose";
 import { DialogProvider } from "./Dialog";
 import "./index.css";
 
@@ -68,6 +70,8 @@ function App() {
                     <Route path="stock-use" element={guard("stock-use", "view", <StockUse />)} />
                     <Route path="users/*" element={<Users />} />
                     <Route path="roles/*" element={<Roles />} />
+                    <Route path="labours/*" element={<Labours />} />
+                    <Route path="daily-close" element={guard("daily-close", "view", <DailyClose />)} />
                     <Route path="orders/website" element={guard("website-orders", "view", <WebsiteOrders />)} />
                     <Route path="orders/:id" element={<WebsiteOrderView />} />
                     <Route path="orders/:id/edit" element={<OrderEdit />} />

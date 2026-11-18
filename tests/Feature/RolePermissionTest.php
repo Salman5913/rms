@@ -58,6 +58,16 @@ class RolePermissionTest extends TestCase
         ])->assertUnprocessable()->assertJsonValidationErrors('permissions.0.module');
     }
 
+    public function test_it_accepts_the_daily_close_module(): void
+    {
+        $this->postJson('/api/admin/roles', [
+            'name' => 'Manager',
+            'permissions' => [['module' => 'daily-close', 'can_view' => true, 'can_create' => true, 'can_edit' => true]],
+        ])->assertCreated()
+            ->assertJsonPath('permissions.0.module', 'daily-close')
+            ->assertJsonPath('permissions.0.can_edit', true);
+    }
+
     public function test_me_exposes_delete_permission(): void
     {
         $role = Role::create(['name' => 'Waiter', 'code' => 'waiter']);

@@ -19,7 +19,7 @@ export function CrudPage(props) {
     );
 }
 
-function CrudPageInner({ title, endpoint, module, columns, searchPlaceholder = "Search…", canCreate = true, canImport = true, canExport = true, extraActions }) {
+function CrudPageInner({ title, endpoint, module, columns, searchPlaceholder = "Search…", canCreate = true, canImport = true, canExport = true, extraActions, params = {}, filters }) {
     const { can } = useAuth();
     const allowCreate = canCreate && can(module, "create");
     const allowEdit = can(module, "edit");
@@ -33,11 +33,15 @@ function CrudPageInner({ title, endpoint, module, columns, searchPlaceholder = "
     const nav = useNavigate();
     const dialog = useDialog();
 
+    const paramsKey = JSON.stringify(params);
     const load = (p = page, s = search) =>
-        api.get(`/${endpoint}`, { params: { page: p, search: s } }).then((r) => setData(r.data));
+        api.get(`/${endpoint}`, { params: { ...params, page: p, search: s } }).then((r) => setData(r.data));
 
     useEffect(() => { load(1); }, [endpoint]); // eslint-disable-line
     useEffect(() => { const t = setTimeout(() => load(1, search), 300); return () => clearTimeout(t); }, [search]); // eslint-disable-line
+    // a changed filter starts again from page 1
+    const firstParams = useMemo(() => paramsKey, []); // eslint-disable-line
+    useEffect(() => { if (paramsKey !== firstParams) { setPage(1); setSelected([]); load(1); } }, [paramsKey]); // eslint-disable-line
 
     const toggleAll = (e) => setSelected(e.target.checked ? data.data.map((r) => r.id) : []);
     const toggleOne = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -62,7 +66,8 @@ function CrudPageInner({ title, endpoint, module, columns, searchPlaceholder = "
         <div>
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <h2 className="text-xl font-extrabold text-slate-800">{title}</h2>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                    {filters}
                     <input value={search} onChange={(e) => setSearch(e.target.value)}
                         placeholder={searchPlaceholder} className={inputCls + " !w-64"} />
                     {canImport && allowCreate && <Btn onClick={() => setImportOpen(true)} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"><Ico n="upload" /> Import</Btn>}
@@ -117,7 +122,7 @@ function CrudPageInner({ title, endpoint, module, columns, searchPlaceholder = "
                 </div>
             )}
 
-            {exportOpen && <ExportModal title={title} name={title} url={`/api/${endpoint}?export=csv`}
+            {exportOpen && <ExportModal title={title} name={title} url={`/api/${endpoint}?${new URLSearchParams({ ...params, export: "csv" })}`}
                 onClose={() => setExportOpen(false)} />}
 
             {importOpen && <ImportModal endpoint={endpoint} onClose={() => setImportOpen(false)}
@@ -236,13 +241,13 @@ function CrudFormInner({ title, endpoint, fields, backTo }) {
                 <aside className="w-full lg:w-80 flex-none lg:sticky lg:top-24 bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
                     {!isView && (
                         <Btn onClick={save} disabled={saving}
-                            className="w-full justify-center py-3 bg-[#161B2E] border border-[#161B2E] text-white hover:bg-[#232a44] hover:border-[#232a44] disabled:opacity-50">
+                            className="w-full justify-center py-3 bg-brand-600 border border-brand-600 text-white hover:bg-brand-700 hover:border-brand-700 disabled:opacity-50">
                             {saving ? "Saving…" : "Save"}
                         </Btn>
                     )}
                     <Btn onClick={() => nav(backTo)}
                         className="w-full justify-center py-3 bg-transparent border border-[#161B2E] text-[#161B2E] hover:bg-slate-100">
-                        ← Back
+                        Back
                     </Btn>
 
                     {checkFields.length > 0 && (

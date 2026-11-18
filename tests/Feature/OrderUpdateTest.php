@@ -20,6 +20,7 @@ class OrderUpdateTest extends TestCase
             'database/migrations/2024_01_01_000002_create_users.php',
             'database/migrations/2024_01_01_000007_create_orders_and_order_items.php',
             'database/migrations/2026_11_15_000001_add_preparing_status_to_orders.php',
+            'database/migrations/2026_11_17_000007_create_daily_closes_table.php',
         ]]);
 
         Sanctum::actingAs(User::forceCreate([

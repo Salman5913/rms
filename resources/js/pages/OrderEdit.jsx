@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../api";
-import { Btn, Spinner, inputCls } from "../ui";
+import { Btn, Select, Spinner, inputCls } from "../ui";
 import { useDialog } from "../Dialog";
 import { useAuth, useRedirectBack } from "../auth";
 import { orderModule } from "../modules";
 import { CategoryMenu, MiniModal, printInvoice } from "./PickupOrders";
+import { CustomerCard, customerOf, missingCustomerField, useRiders } from "../delivery";
 
 const TYPE_META = {
     website: { title: "Website", back: "/orders/website" },
@@ -52,6 +53,10 @@ export default function OrderEdit() {
     const [cart, setCart] = useState(null);
     const [modal, setModal] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [customer, setCustomer] = useState(null);
+    const [areas, setAreas] = useState([]);
+    const [areaId, setAreaId] = useState(null);
+    const riders = useRiders();
     const nav = useNavigate();
     const dialog = useDialog();
     const { can } = useAuth();
@@ -63,6 +68,13 @@ export default function OrderEdit() {
             // the order's type decides which Sales sub-module guards this page
             if (!can(orderModule(r.data.type), "edit")) return redirectBack();
             setOrder(r.data);
+            setCustomer(customerOf(r.data));
+            setAreaId(r.data.delivery_area_id ?? null);
+            // active areas, plus the order's own area even if it has since been disabled
+            if (["delivery", "website"].includes(r.data.type)) {
+                api.get("/admin/delivery-areas", { params: { all: 1 } })
+                    .then((a) => setAreas(a.data.filter((x) => x.status || x.id === r.data.delivery_area_id)));
+            }
         });
     }, [id]); // eslint-disable-line
 
@@ -111,7 +123,7 @@ export default function OrderEdit() {
             <div className="max-w-lg bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
                 <h2 className="text-lg font-extrabold text-slate-800 mb-2">Order {order.order_number} can't be edited</h2>
                 <p className="text-sm text-slate-500 mb-4">You can edit website orders only while their status is Received.</p>
-                <Btn onClick={() => nav(meta.back)} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">← Back</Btn>
+                <Btn onClick={() => nav(meta.back)} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Back</Btn>
             </div>
         );
     }
@@ -139,18 +151,34 @@ export default function OrderEdit() {
             );
     };
 
-    const subtotal = cart.reduce((s, l) => s + l.unit_price * (Number(l.qty) || 0), 0);
-    const charges = Number(order.delivery_charges) || 0;
-    const total = subtotal + charges;
+    // delivery and website orders carry customer details, a rider and a delivery area
+    const isDelivery = ["delivery", "website"].includes(order.type);
+    const areaRequired = order.type === "delivery";
+
+    // same area keeps the charges the order was placed with; another area uses its current charges
+    const sameArea = areaId === (order.delivery_area_id ?? null);
+    const selectedArea = areas.find((a) => a.id === areaId);
+    const areaName = sameArea ? order.delivery_area : selectedArea?.name;
+    const charges = !isDelivery || sameArea
+        ? Number(order.delivery_charges) || 0
+        : Number(selectedArea?.delivery_charges ?? 0);
+
+    // total is the order amount only; delivery charges are shown separately
+    const total = cart.reduce((s, l) => s + l.unit_price * (Number(l.qty) || 0), 0);
+    const missing = !isDelivery ? null
+        : missingCustomerField(customer)
+        ?? (areaRequired && !areaId ? ["Delivery area required", "Select a delivery area before updating the order."] : null);
 
     const save = async (print = false) => {
         if (!cart.length) return dialog.alert("Add at least one item to the cart before updating the order.", { title: "Cart is empty", variant: "warning" });
+        if (missing) return dialog.alert(missing[1].replace("placing", "updating"), { title: missing[0], variant: "warning" });
 
         const cartSnapshot = cart.map((l) => ({ ...l }));
         setSaving(true);
         try {
             const r = await api.post(`/admin/orders/${order.id}`, {
                 items: cart.map(({ key, ...l }) => l),
+                ...(isDelivery ? { ...customer, delivery_area_id: areaId } : {}),
             });
             if (print) printInvoice(r.data, cartSnapshot);
             nav(meta.back);
@@ -197,7 +225,7 @@ export default function OrderEdit() {
                             className={inputCls + " !w-64"}
                         />
                         <Btn onClick={() => nav(meta.back)} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">
-                            ← Back
+                            Back
                         </Btn>
                     </div>
                 </div>
@@ -205,8 +233,15 @@ export default function OrderEdit() {
                 <CategoryMenu items={items} onAdd={add} forceOpen={!!q} cart={cart} onQty={updateQty} onQtyBlur={onQtyBlur} />
             </div>
 
-            {/* ---------- order summary sidebar ---------- */}
-            <aside className="w-[360px] flex-none sticky top-24 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col max-h-[calc(100vh-8rem)]">
+            {/* ---------- sidebar: (delivery) customer details + order summary ---------- */}
+            <aside className={"w-[360px] flex-none sticky top-24 max-h-[calc(100vh-8rem)] " + (isDelivery ? "overflow-y-auto space-y-4 pb-1" : "flex flex-col")}>
+                {isDelivery && <CustomerCard value={customer} onChange={setCustomer} riders={riders} order={order}
+                    areaRequired={areaRequired}
+                    areaSelect={<Select value={areaId} onChange={(v) => setAreaId(v === "" || v == null ? null : Number(v))}
+                        placeholder={areaRequired ? "Select delivery area" : "No delivery area"} clearable={!areaRequired}
+                        options={areas.map((a) => ({ value: a.id, label: `${a.name} (Rs. ${Number(a.delivery_charges).toLocaleString()})` }))} />} />}
+
+                <div className={"bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col " + (isDelivery ? "" : "min-h-0 flex-1")}>
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                     <h3 className="font-bold text-slate-800">Order summary</h3>
                     <span className="text-xs font-semibold bg-brand-50 text-brand-700 rounded-full px-2.5 py-1">
@@ -214,7 +249,7 @@ export default function OrderEdit() {
                     </span>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-5 py-2 min-h-[120px]">
+                <div className={"px-5 py-2 min-h-[120px] " + (isDelivery ? "" : "flex-1 overflow-y-auto")}>
                     {cart.length === 0 && (
                         <div className="text-center text-slate-300 py-10">
                             <p className="text-3xl mb-2">🛒</p>
@@ -268,31 +303,31 @@ export default function OrderEdit() {
                 </div>
 
                 <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/60 rounded-b-2xl">
-                    <div className="flex justify-between text-sm text-slate-500 mb-1">
-                        <span>Subtotal</span><span>Rs. {subtotal.toLocaleString()}</span>
-                    </div>
-                    {charges > 0 && (
-                        <div className="flex justify-between text-sm text-slate-500 mb-1">
-                            <span>Delivery Charges ({order.delivery_area})</span><span>Rs. {charges.toLocaleString()}</span>
-                        </div>
-                    )}
-                    <div className="flex justify-between font-extrabold text-slate-800 text-lg mb-4">
+                    <div className={"flex justify-between font-extrabold text-slate-800 text-lg " + (isDelivery || charges > 0 ? "mb-1" : "mb-4")}>
                         <span>Total</span><span>Rs. {total.toLocaleString()}</span>
                     </div>
+                    {(isDelivery || charges > 0) && (
+                        <div className="flex justify-between text-sm text-slate-500 mb-4">
+                            <span>Delivery Charges{areaName ? ` (${areaName})` : ""}</span>
+                            <span>{areaId || charges > 0 ? `Rs. ${charges.toLocaleString()}` : "—"}</span>
+                        </div>
+                    )}
+                    {missing && <p className="text-xs text-amber-600 mb-2">Fill in the customer's name, phone and address to update the order.</p>}
                     <Btn
                         onClick={() => save()}
-                        disabled={!cart.length || saving}
+                        disabled={!cart.length || !!missing || saving}
                         className="w-full bg-brand-600 text-white hover:bg-brand-700 justify-center py-3 disabled:opacity-40"
                     >
                         Update Order
                     </Btn>
                     <Btn
                         onClick={() => save(true)}
-                        disabled={!cart.length || saving}
+                        disabled={!cart.length || !!missing || saving}
                         className="w-full mt-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 justify-center py-3 disabled:opacity-40"
                     >
                         Print
                     </Btn>
+                </div>
                 </div>
             </aside>
 

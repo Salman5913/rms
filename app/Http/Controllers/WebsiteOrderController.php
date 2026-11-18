@@ -64,6 +64,7 @@ class WebsiteOrderController extends Controller
             'READY'             => 'PREPARING',
             'OUT_FOR_DELIVERY'  => 'ON_THE_WAY',
             'DELIVERED'         => 'DELIVERED',
+            'CANCELLED'         => 'CANCELLED',
         ];
 
         return response()->json([

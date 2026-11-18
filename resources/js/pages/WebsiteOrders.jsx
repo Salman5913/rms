@@ -6,22 +6,37 @@ import { formatDateTime } from "../utils";
 import ExportModal from "../ExportModal";
 import { useAuth, useRedirectBack } from "../auth";
 import { MODULES, orderModule } from "../modules";
+import { DeliveryStatusSelect, RiderSelect, useRiders } from "../delivery";
+import { useDialog } from "../Dialog";
+
+const rs = (v) => `Rs. ${Number(v).toLocaleString()}`;
 
 const STATUSES = ["RECEIVED", "PREPARING", "READY", "OUT_FOR_DELIVERY", "DELIVERED"];
-const STATUS_LABEL = { RECEIVED: "Received", PREPARING: "Preparing", READY: "Ready", OUT_FOR_DELIVERY: "Out for Delivery", DELIVERED: "Delivered" };
+const STATUS_LABEL = { RECEIVED: "Received", PREPARING: "Preparing", READY: "Ready", OUT_FOR_DELIVERY: "Out for Delivery", DELIVERED: "Delivered", CANCELLED: "Cancelled" };
+/** only website orders (of the types using this dropdown) can be cancelled */
+const statusesFor = (type) => (type === "website" ? [...STATUSES, "CANCELLED"] : STATUSES);
 
 export function StatusSelect({ order, onChanged }) {
     const [status, setStatus] = useState(order.status);
     const canEdit = useAuth().can(orderModule(order.type), "edit");
+    const dialog = useDialog();
+    useEffect(() => setStatus(order.status), [order.status]);
     return (
         <Select size="sm" searchable={false} clearable={false} value={status} disabled={!canEdit}
             onChange={async (v) => {
                 if (!v || v === status) return;
+                const prev = status;
                 setStatus(v);
-                await api.post(`/admin/orders/${order.id}/status`, { status: v });
-                onChanged?.();
+                try {
+                    await api.post(`/admin/orders/${order.id}/status`, { status: v });
+                    onChanged?.();
+                } catch (err) {
+                    // e.g. "Out for delivery" on a website order with no rider yet
+                    setStatus(prev);
+                    dialog.alert(err.response?.data?.message ?? "The status could not be changed. Try again.", { title: "Can't change status", variant: "warning" });
+                }
             }}
-            options={STATUSES.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
+            options={statusesFor(order.type).map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
             className="w-40" />
     );
 }
@@ -33,6 +48,7 @@ export default function WebsiteOrders() {
     const [exportOpen, setExportOpen] = useState(false);
     const nav = useNavigate();   // ← move here
     const allowEdit = useAuth().can("website-orders", "edit");
+    const riders = useRiders();
 
     const load = (p = page, s = search) =>
         api.get("/admin/orders", { params: { type: "website", search: s, page: p } }).then((r) => {
@@ -59,36 +75,51 @@ export default function WebsiteOrders() {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 border-slate-200 overflow-x-auto">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="text-left text-slate-500 bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wide">
-                            <th className="p-3 font-semibold">Order #</th>
-                            <th className="p-3 font-semibold">Items</th>
+                            <th className="p-3 font-semibold whitespace-nowrap">Order #</th>
                             <th className="p-3 font-semibold">Customer</th>
-                            <th className="p-3 font-semibold">Phone</th>
                             <th className="p-3 font-semibold">Items</th>
+                            <th className="p-3 font-semibold whitespace-nowrap">Delivery Area</th>
                             <th className="p-3 font-semibold">Total</th>
+                            <th className="p-3 font-semibold whitespace-nowrap">Delivery Charges</th>
+                            <th className="p-3 font-semibold">Rider</th>
                             <th className="p-3 font-semibold">Status</th>
-                            <th className="p-3 font-semibold">Order Date</th>
-                            <th className="p-3 w-24 text-right">Actions</th>
+                            <th className="p-3 font-semibold whitespace-nowrap">Order Date</th>
+                            {/* pinned so the action buttons stay visible when the table scrolls sideways */}
+                            <th className="p-3 text-right sticky right-0 bg-slate-50 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {data.data.map((o) => (
+                        {data.data.map((o) => {
+                            const rowBg = !o.is_viewed ? "bg-yellow-50 group-hover:bg-yellow-100" : "bg-white group-hover:bg-slate-50";
+                            return (
                             <tr key={o.id} onClick={() => nav(`/orders/${o.id}`)}
-                                className={"border-b last:border-0 cursor-pointer " + (!o.is_viewed ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-slate-50")}>
-                                <td className="p-3 font-semibold">{o.order_number}{!o.is_viewed && <span className="ml-2 text-[10px] bg-yellow-400 text-yellow-900 font-bold px-1.5 py-0.5 rounded-full">NEW</span>}</td>
-                                <td className="p-3 font-semibold">{o.items?.map((i) => `${i.name} (${i.qty})`)?.join(' , ')}</td>
-                                <td className="p-3">{o.customer_name}</td>
-                                <td className="p-3">{o.customer_phone}</td>
-                                <td className="p-3">{o.items.reduce((s, i) => s + i.qty, 0)}</td>
-                                <td className="p-3 font-bold">Rs. {Number(o.total).toLocaleString()}</td>
+                                className={"group border-b border-slate-100 last:border-0 cursor-pointer " + rowBg}>
+                                <td className="p-3 font-semibold whitespace-nowrap">
+                                    {o.order_number}
+                                    {!o.is_viewed && <span className="ml-2 text-[10px] bg-yellow-400 text-yellow-900 font-bold px-1.5 py-0.5 rounded-full">NEW</span>}
+                                </td>
+                                {/* name, phone and address stacked in one column */}
+                                <td className="p-3 min-w-[180px] max-w-[240px]">
+                                    <span className="block font-semibold text-slate-700 truncate" title={o.customer_name ?? ""}>{o.customer_name ?? "—"}</span>
+                                    {o.customer_phone && <span className="block text-xs text-slate-500 whitespace-nowrap">{o.customer_phone}</span>}
+                                    {o.address && <span className="block text-xs text-slate-400 truncate" title={o.address}>{o.address}</span>}
+                                </td>
+                                <td className="p-3 min-w-[200px] max-w-[280px] text-slate-700">{o.items?.map((i) => `${i.name} (${i.qty})`)?.join(", ")}</td>
+                                <td className="p-3 min-w-[120px]">{o.delivery_area ?? "—"}</td>
+                                <td className="p-3 whitespace-nowrap font-bold text-slate-800">{rs(o.total)}</td>
+                                <td className="p-3 whitespace-nowrap">{rs(o.delivery_charges ?? 0)}</td>
+                                <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                                    <RiderSelect order={o} riders={riders} disabled={!allowEdit} onChanged={() => load()} />
+                                </td>
                                 <td className="p-3" onClick={(e) => e.stopPropagation()}>
                                     <StatusSelect order={o} onChanged={() => load()} />
                                 </td>
-                                <td className="p-3 text-slate-400 text-xs">{formatDateTime(o.created_at)}</td>
-                                <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                <td className="p-3 text-slate-400 text-xs whitespace-nowrap">{formatDateTime(o.created_at)}</td>
+                                <td className={"p-3 text-right sticky right-0 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)] " + rowBg} onClick={(e) => e.stopPropagation()}>
                                     <div className="flex justify-end gap-1.5">
                                         <Link to={`/orders/${o.id}`} title="View" className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center"><Ico n="eye" /></Link>
                                         {allowEdit && (o.status === "RECEIVED"
@@ -97,8 +128,9 @@ export default function WebsiteOrders() {
                                     </div>
                                 </td>
                             </tr>
-                        ))}
-                        {data.data.length === 0 && <tr><td colSpan={8} className="p-10 text-center text-slate-300">No orders yet</td></tr>}
+                            );
+                        })}
+                        {data.data.length === 0 && <tr><td colSpan={10}className="p-10 text-center text-slate-300">No orders yet</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -132,8 +164,10 @@ export function WebsiteOrderView() {
             <div className="flex items-center justify-between mb-5">
                 <h2 className="text-xl font-extrabold text-slate-800">Order {order.order_number}</h2>
                 <div className="flex items-center gap-2">
-                    <StatusSelect order={order} onChanged={() => api.get(`/admin/orders/${id}`).then((r) => setOrder(r.data))} />
-                    <Btn onClick={() => nav(MODULES.find((m) => m.key === orderModule(order.type))?.path ?? "/orders/website")} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">← Back</Btn>
+                    {order.type === "delivery"
+                        ? <DeliveryStatusSelect order={order} disabled={!can("delivery-orders", "edit")} onChanged={() => api.get(`/admin/orders/${id}`).then((r) => setOrder(r.data))} />
+                        : <StatusSelect order={order} onChanged={() => api.get(`/admin/orders/${id}`).then((r) => setOrder(r.data))} />}
+                    <Btn onClick={() => nav(MODULES.find((m) => m.key === orderModule(order.type))?.path ?? "/orders/website")} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">Back</Btn>
                 </div>
             </div>
 
@@ -144,6 +178,7 @@ export function WebsiteOrderView() {
                     <p className="col-span-2"><span className="text-slate-400">Address:</span> {order.address}</p>
                     {order.notes && <p className="col-span-2"><span className="text-slate-400">Notes:</span> {order.notes}</p>}
                     {order.delivery_area && <p className="col-span-2"><span className="text-slate-400">Delivery Area:</span> <b>{order.delivery_area}</b></p>}
+                    {["delivery", "website"].includes(order.type) && <p className="col-span-2"><span className="text-slate-400">Rider:</span> <b>{order.rider_name ?? "Not assigned yet"}</b></p>}
                 </div>
                 <div className="border-t pt-3 space-y-2">
                     {order.items.map((i) => (
@@ -157,15 +192,15 @@ export function WebsiteOrderView() {
                         </div>
                     ))}
                 </div>
-                {Number(order.delivery_charges) > 0 && (
-                    <div className="border-t pt-3 space-y-1 text-sm">
-                        <div className="flex justify-between"><span className="text-slate-400">Order Amount</span><span>Rs. {(order.total - order.delivery_charges).toLocaleString()}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-400">Delivery Charges</span><span>Rs. {Number(order.delivery_charges).toLocaleString()}</span></div>
-                    </div>
-                )}
                 <div className="border-t pt-3 flex justify-between font-extrabold">
                     <span>Total</span><span className="text-brand-600">Rs. {Number(order.total).toLocaleString()}</span>
                 </div>
+                {/* delivery charges are kept separate from the total */}
+                {Number(order.delivery_charges) > 0 && (
+                    <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Delivery Charges</span><span>Rs. {Number(order.delivery_charges).toLocaleString()}</span>
+                    </div>
+                )}
             </div>
         </div>
     );
