@@ -45,6 +45,18 @@ class DeliveryAreaTest extends TestCase
         $this->assertSame(0, DeliveryArea::count());
     }
 
+    /** the generic ApiCrudController ?status= filter (same for every module with a status column) */
+    public function test_list_can_be_filtered_by_status(): void
+    {
+        DeliveryArea::create(['name' => 'DHA', 'delivery_charges' => 100, 'status' => true]);
+        DeliveryArea::create(['name' => 'Gulberg', 'delivery_charges' => 150, 'status' => false]);
+
+        $this->getJson('/api/admin/delivery-areas?status=1')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.name', 'DHA');
+        $this->getJson('/api/admin/delivery-areas?status=0')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.name', 'Gulberg');
+        $this->getJson('/api/admin/delivery-areas')->assertOk()->assertJsonCount(2, 'data');
+        $this->getJson('/api/admin/delivery-areas?status=maybe')->assertUnprocessable()->assertJsonValidationErrors('status');
+    }
+
     public function test_validation(): void
     {
         $this->postJson('/api/admin/delivery-areas', ['delivery_charges' => -1])

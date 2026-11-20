@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api";
-import { Btn, Ico, Pagination, Select, Spinner, inputCls } from "../ui";
+import { Btn, ColumnFilter, DatePicker, Ico, Pagination, Select, Spinner, TableBody, inputCls, useLoading } from "../ui";
 import { CategoryMenu, MiniModal, printInvoice } from "./PickupOrders";
 import { formatDateTime } from "../utils";
 import ExportModal from "../ExportModal";
 import { useDialog } from "../Dialog";
 import { useAuth } from "../auth";
-import { CustomerCard, DeliveryStatusSelect, RiderSelect, emptyCustomer, missingCustomerField, useRiders } from "../delivery";
+import { CustomerCard, DELIVERY_STATUSES, DeliveryStatusSelect, RiderSelect, emptyCustomer, missingCustomerField, riderFilterOptions, useRiders } from "../delivery";
 
 const rs = (v) => `Rs. ${Number(v).toLocaleString()}`;
 
@@ -18,13 +18,20 @@ export default function HomeDeliveryOrders() {
     const allowEdit = can("delivery-orders", "edit");
     const allowDelete = can("delivery-orders", "delete");
     const [data, setData] = useState(null);
+    const [loading, track] = useLoading();
     const [search, setSearch] = useState("");
+    const [range, setRange] = useState({ from: "", to: "" }); // created-date filter, empty = all dates
     const [page, setPage] = useState(1);
     const nav = useNavigate();
     const dialog = useDialog();
     const [selected, setSelected] = useState([]);
     const [exportOpen, setExportOpen] = useState(false);
     const riders = useRiders();
+    const allRiders = useRiders(true);
+    // column filters (?status= / ?rider_id=), "" = all
+    const [statusFilter, setStatusFilter] = useState("");
+    const [riderFilter, setRiderFilter] = useState("");
+    const filterParams = { status: statusFilter || undefined, rider_id: riderFilter || undefined };
 
     const toggleAll = (e) => setSelected(e.target.checked ? data.data.map((r) => r.id) : []);
     const toggleOne = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -50,23 +57,27 @@ export default function HomeDeliveryOrders() {
     const rows = data?.data ?? [];
     const allChecked = rows.length > 0 && rows.every((r) => selected.includes(r.id));
 
-    const load = (p = page, s = search) =>
-        api.get("/admin/orders", { params: { type: "delivery", search: s, page: p } }).then((r) => {
+    // `quiet` reloads (after a rider / status change in a row) keep the rows on screen instead of showing the loader
+    const load = (p = page, s = search, quiet = false) => {
+        const request = api.get("/admin/orders", { params: { type: "delivery", search: s, page: p, from: range.from || undefined, to: range.to || undefined, ...filterParams } }).then((r) => {
             // deleting the last row on the last page leaves it empty — step back one page
-            if (r.data.data.length === 0 && p > 1) return load(p - 1, s);
+            if (r.data.data.length === 0 && p > 1) return load(p - 1, s, quiet);
             setData(r.data); setPage(r.data.current_page);
         });
+        return quiet ? request : track(request);
+    };
     const goTo = (p) => { setSelected([]); load(p); };
-    // runs on mount and whenever the search changes; a new search starts from page 1
-    useEffect(() => { const t = setTimeout(() => load(1, search), 300); return () => clearTimeout(t); }, [search]); // eslint-disable-line
+    // runs on mount and whenever the search, date range or a column filter changes; a new filter starts from page 1
+    useEffect(() => { setSelected([]); const t = setTimeout(() => load(1, search), 300); return () => clearTimeout(t); }, [search, range, statusFilter, riderFilter]); // eslint-disable-line
     if (!data) return <Spinner />;
 
     return (
         <div>
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <h2 className="text-xl font-extrabold text-slate-800">Home Delivery Orders</h2>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
                     <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order # / customer / phone / address…" className={inputCls + " !w-64"} />
+                    <DatePicker range clearable value={range} onChange={setRange} placeholder="All dates" className="w-64" />
                     <Btn onClick={() => setExportOpen(true)} className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">
                         <Ico n="download" /> Export
                     </Btn>
@@ -87,14 +98,18 @@ export default function HomeDeliveryOrders() {
                             <th className="p-3 font-semibold whitespace-nowrap">Delivery Area</th>
                             <th className="p-3 font-semibold">Total</th>
                             <th className="p-3 font-semibold whitespace-nowrap">Delivery Charges</th>
-                            <th className="p-3 font-semibold">Rider</th>
-                            <th className="p-3 font-semibold">Status</th>
+                            <th className="p-3 font-semibold">
+                                <ColumnFilter label="Rider" value={riderFilter} onChange={setRiderFilter} options={riderFilterOptions(allRiders)} searchable />
+                            </th>
+                            <th className="p-3 font-semibold">
+                                <ColumnFilter label="Status" value={statusFilter} onChange={setStatusFilter} options={DELIVERY_STATUSES} />
+                            </th>
                             <th className="p-3 font-semibold whitespace-nowrap">Order Date</th>
                             {/* pinned so the action buttons stay visible when the table scrolls sideways */}
-                            <th className="p-3 text-right sticky right-0 bg-slate-50 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">Actions</th>
+                            <th className="p-3 text-center sticky right-0 bg-slate-50 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <TableBody loading={loading} cols={11}>
                         {data.data.map((o) => (
                             <tr key={o.id} className="group border-b border-slate-100 last:border-0 hover:bg-slate-50">
                                 <td className="p-3"><input type="checkbox" checked={selected.includes(o.id)} onChange={() => toggleOne(o.id)} className="accent-brand-600" /></td>
@@ -109,11 +124,11 @@ export default function HomeDeliveryOrders() {
                                 <td className="p-3 min-w-[120px]">{o.delivery_area ?? "—"}</td>
                                 <td className="p-3 whitespace-nowrap font-bold text-slate-800">{rs(o.total)}</td>
                                 <td className="p-3 whitespace-nowrap">{rs(o.delivery_charges)}</td>
-                                <td className="p-3"><RiderSelect order={o} riders={riders} disabled={!allowEdit} onChanged={() => load()} /></td>
-                                <td className="p-3"><DeliveryStatusSelect order={o} disabled={!allowEdit} onChanged={() => load()} /></td>
+                                <td className="p-3"><RiderSelect order={o} riders={riders} disabled={!allowEdit} onChanged={() => load(page, search, true)} /></td>
+                                <td className="p-3"><DeliveryStatusSelect order={o} disabled={!allowEdit} onChanged={() => load(page, search, true)} /></td>
                                 <td className="p-3 text-slate-400 text-xs whitespace-nowrap">{formatDateTime(o.created_at)}</td>
-                                <td className="p-3 text-right sticky right-0 bg-white group-hover:bg-slate-50 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">
-                                    <div className="flex justify-end gap-1.5">
+                                <td className="p-3 text-center sticky right-0 bg-white group-hover:bg-slate-50 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">
+                                    <div className="flex justify-center gap-1.5">
                                         <Link to={`/orders/${o.id}`} className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center"><Ico n="eye" /></Link>
                                         {allowEdit && <Link to={`/orders/${o.id}/edit`} title="Edit" className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center"><Ico n="edit" /></Link>}
                                         {allowDelete && <button onClick={() => destroy(o.id)} title="Delete" className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center"><Ico n="trash" /></button>}
@@ -122,11 +137,11 @@ export default function HomeDeliveryOrders() {
                             </tr>
                         ))}
                         {data.data.length === 0 && <tr><td colSpan={11}className="p-10 text-center text-slate-300">No home delivery orders yet</td></tr>}
-                    </tbody>
+                    </TableBody>
                 </table>
             </div>
             <Pagination data={data} onPage={goTo} />
-            {exportOpen && <ExportModal title="Home Delivery Orders" name="Home-Delivery-Orders" url="/api/admin/orders?type=delivery&export=csv" onClose={() => setExportOpen(false)} />}
+            {exportOpen && <ExportModal title="Home Delivery Orders" name="Home-Delivery-Orders" url={`/api/admin/orders?${new URLSearchParams({ type: "delivery", export: "csv", ...(statusFilter ? { status: statusFilter } : {}), ...(riderFilter ? { rider_id: riderFilter } : {}) })}`} onClose={() => setExportOpen(false)} />}
         </div>
     );
 }
@@ -202,6 +217,12 @@ export function HomeDeliveryCreate() {
     // total is the order amount only; delivery charges are shown separately
     const total = cart.reduce((s, l) => s + l.unit_price * (Number(l.qty) || 0), 0);
     const missing = missingCustomerField(customer);
+
+    // a saved customer's name, address and (still active) delivery area are filled in from the phone
+    const fillFromCustomer = (c) => {
+        setCustomer((cur) => ({ ...cur, customer_name: c.name, address: c.address ?? "" }));
+        if (c.delivery_area_id && areas.some((a) => a.id === c.delivery_area_id)) setAreaId(c.delivery_area_id);
+    };
     const canPlace = cart.length > 0 && !!area && !missing && !placing;
 
     const place = async (print = false) => {
@@ -269,7 +290,7 @@ export function HomeDeliveryCreate() {
 
             {/* ---------- sidebar: customer details + order summary (scroll together) ---------- */}
             <aside className="w-[360px] flex-none sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto space-y-4 pb-1">
-                <CustomerCard value={customer} onChange={setCustomer} riders={riders}
+                <CustomerCard value={customer} onChange={setCustomer} riders={riders} onCustomerFound={fillFromCustomer}
                     areaSelect={<Select value={areaId} onChange={(v) => setAreaId(v === "" || v == null ? null : Number(v))}
                         placeholder="Select delivery area"
                         options={areas.map((a) => ({ value: a.id, label: `${a.name} (${rs(a.delivery_charges)})` }))} />} />

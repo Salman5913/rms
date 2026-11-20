@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
-import { CrudPage, CrudForm } from "../Crud";
+import { CrudPage, CrudForm, STATUS_FILTER } from "../Crud";
+import { StatusText } from "../ui";
 import { MODULE_GROUPS, MODULES } from "../modules";
 
 const ACTION_COLS = ["can_view", "can_create", "can_edit", "can_delete"];
@@ -9,7 +10,7 @@ const columns = [
     { key: "id", label: "ID" },
     { key: "name", label: "Role Name" },
     { key: "code", label: "Code" },
-    { key: "status", label: "Status", render: (r) => (r.status ? "✅ Active" : "⛔ Disabled") },
+    { key: "status", label: "Status", filter: STATUS_FILTER, render: (r) => <StatusText on={r.status} /> },
 ];
 
 /** permissions matrix editor - one row per inner (sub) module, grouped under its sidebar heading */
@@ -47,7 +48,7 @@ function PermissionsMatrix({ value = [], onChange, disabled }) {
                 </thead>
                 <tbody>
                     {MODULE_GROUPS.map((g) => {
-                        const grouped = g.modules.length > 1;
+                        const grouped = g.modules.length > 1 || g.heading;   // heading: true shows the group even with one module (sidebar parent)
                         return [
                             grouped && (
                                 <tr key={g.label} className="bg-slate-50/60 border-b">

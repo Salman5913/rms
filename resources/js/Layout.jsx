@@ -12,7 +12,7 @@ const NAV = [
     {
         label: "Products", icon: "products",
         children: [
-            { label: "Products", path: "/products", module: "products" },
+            { label: "Products List", path: "/products", module: "products" },
             { label: "Extras", path: "/extras", module: "extras" },
             { label: "Options", path: "/options", module: "options" },
         ],
@@ -29,6 +29,7 @@ const NAV = [
             { label: "Home Delivery", path: "/orders/delivery", module: "delivery-orders" },
         ],
     },
+    { label: "Customers", icon: "customer", path: "/customers", module: "customers" },
     {
         label: "Inventory", icon: "inventory",
         children: [
@@ -36,10 +37,20 @@ const NAV = [
             { label: "Stock Use Voucher", path: "/stock-use", module: "stock-use" },
         ],
     },
+    { label: "Vendors", icon: "vendor",path: "/vendors", module: "vendors"},
+    { label: "Loans", icon: "loan", path: "/loans", module: "loans" },
     {
-        label: "Labour", icon: "labour",
+        label: "Extra Expenses", icon: "expense",
         children: [
-            { label: "Labour", path: "/labours", module: "labours" },
+            { label: "Expenses", path: "/expenses", module: "expenses" },
+            { label: "Expense Categories", path: "/expense-categories", module: "expense-categories" },
+        ],
+    },
+    {
+        label: "Employees", icon: "employee",
+        children: [
+            { label: "Employees List", path: "/employees", module: "employees" },
+            { label: "Payroll", path: "/payroll", module: "employee-payments" },
         ],
     },
     {
@@ -62,8 +73,12 @@ const ICON = {
     inventory: "M20.25 7.5l-.63 10.4a2.25 2.25 0 01-2.25 2.1H6.63a2.25 2.25 0 01-2.25-2.1L3.75 7.5m16.5 0H3.75m16.5 0a1.5 1.5 0 001.5-1.5V5.25a1.5 1.5 0 00-1.5-1.5H3.75a1.5 1.5 0 00-1.5 1.5V6a1.5 1.5 0 001.5 1.5M9.75 11.25h4.5",
     users: "M15 19.13A9.4 9.4 0 0018 19.5a9.4 9.4 0 002.63-.37 3 3 0 00-4.12-2.54M15 19.13V19.13A5.98 5.98 0 009 14.25a5.98 5.98 0 00-6 4.88 12 12 0 006 1.37 11.9 11.9 0 006-1.37zM15 9.75a3 3 0 11-6 0 3 3 0 016 0zm6 1.5a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z",
     roles: "M9 12.75L11.25 15 15 9.75m-3-7.04A11.96 11.96 0 013.6 6 12 12 0 003 9.75c0 5.59 3.82 10.29 9 11.62 5.18-1.33 9-6.03 9-11.62 0-1.31-.21-2.57-.6-3.75A11.96 11.96 0 0112 2.71z",
-    labour: "M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.12a7.5 7.5 0 0115 0A17.9 17.9 0 0112 21.75c-2.68 0-5.22-.58-7.5-1.63z",
+    employee: "M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.12a7.5 7.5 0 0115 0A17.9 17.9 0 0112 21.75c-2.68 0-5.22-.58-7.5-1.63z",
     reports: "M3 13.13C3 12.5 3.5 12 4.13 12h2.25c.62 0 1.12.5 1.12 1.13v6.75c0 .62-.5 1.12-1.12 1.12H4.13A1.13 1.13 0 013 19.88v-6.75zM9.75 8.63c0-.63.5-1.13 1.13-1.13h2.25c.62 0 1.12.5 1.12 1.13v11.25c0 .62-.5 1.12-1.12 1.12h-2.25a1.13 1.13 0 01-1.13-1.12V8.63zM16.5 4.13c0-.63.5-1.13 1.13-1.13h2.25C20.5 3 21 3.5 21 4.13v15.75c0 .62-.5 1.12-1.12 1.12h-2.25a1.13 1.13 0 01-1.13-1.12V4.13z",
+    vendor: "M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.35m-16.5 11.65V9.35m0 0a3 3 0 003.75-.62A3 3 0 0012 9.75a3 3 0 002.25-1.01 3 3 0 003.75.62m-16.5 0a3 3 0 01-.62-4.72l1.19-1.19A1.5 1.5 0 015.12 3h13.76a1.5 1.5 0 011.06.44l1.19 1.19a3 3 0 01-.62 4.72M6.75 18h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .41.34.75.75.75z",
+    loan: "M2.25 18.75a60.07 60.07 0 0115.8 2.1c.73.2 1.45-.34 1.45-1.1V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.38c0-.62.5-1.12 1.13-1.12H20.25M2.25 6v9m18-10.5v.75c0 .41.34.75.75.75h.75m-1.5-1.5h.38c.62 0 1.12.5 1.12 1.13v9.75c0 .62-.5 1.12-1.12 1.12h-.38m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.38a1.13 1.13 0 01-1.12-1.13V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.01v.01H18v-.01zm-12 0h.01v.01H6v-.01z",
+    expense: "M9 14.25l6-6m4.5-3.49V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.76c0-1.11.8-2.06 1.9-2.19a48.5 48.5 0 0111.2 0c1.1.13 1.9 1.08 1.9 2.19zM9.75 9h.01v.01h-.01V9zm.38 0a.38.38 0 11-.75 0 .38.38 0 01.75 0zm4.12 4.5h.01v.01h-.01v-.01zm.38 0a.38.38 0 11-.75 0 .38.38 0 01.75 0z",
+    customer: "M17.98 18.73A7.48 7.48 0 0012 15.75a7.48 7.48 0 00-5.98 2.98m11.96 0a9 9 0 10-11.96 0m11.96 0A8.97 8.97 0 0112 21a8.97 8.97 0 01-5.98-2.27M15 9.75a3 3 0 11-6 0 3 3 0 016 0z",
     area: "M15 10.5a3 3 0 11-6 0 3 3 0 016 0zM19.5 10.5c0 7.14-7.5 11.25-7.5 11.25S4.5 17.64 4.5 10.5a7.5 7.5 0 1115 0z",
     logout: "M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9",
 };

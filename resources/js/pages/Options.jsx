@@ -1,10 +1,11 @@
 import { Route, Routes } from "react-router-dom";
-import { CrudPage, CrudForm } from "../Crud";
+import { CrudPage, CrudForm, STATUS_FILTER } from "../Crud";
+import { StatusText } from "../ui";
 
 const columns = [
     { key: "name", label: "Option Name" },
     { key: "price", label: "Price", render: (r) => `Rs. ${Number(r.price).toLocaleString()}` },
-    { key: "status", label: "Status", render: (r) => (r.status ? "✅ Active" : "⛔ Disabled") },
+    { key: "status", label: "Status", filter: STATUS_FILTER, render: (r) => <StatusText on={r.status} /> },
 ];
 const fields = [
     { name: "name", label: "Option Name", required: true },

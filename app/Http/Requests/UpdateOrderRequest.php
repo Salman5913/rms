@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Labour;
+use App\Models\Employee;
 use App\Models\Order;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -29,7 +29,7 @@ class UpdateOrderRequest extends FormRequest
             'customer_name' => 'sometimes|required|string|max:255',
             'customer_phone' => 'sometimes|required|string|max:50',
             'address' => 'sometimes|required|string|max:1000',
-            'rider_id' => ['sometimes', 'nullable', 'integer', Labour::activeRiderRule()],
+            'rider_id' => ['sometimes', 'nullable', 'integer', Employee::activeRiderRule()],
             // an active area, or the one the order already has (even if since disabled)
             'delivery_area_id' => ['sometimes', 'nullable', 'integer', Rule::exists('delivery_areas', 'id')
                 ->where(fn ($q) => $q->where('status', true)->orWhere('id', $this->currentAreaId()))],

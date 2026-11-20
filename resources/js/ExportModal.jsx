@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Btn, Field, Ico, inputCls } from "./ui";
+import { Btn, DatePicker, Field, Ico } from "./ui";
 import handleExport from "./utils";
 
 /* local YYYY-MM-DD (toISOString would shift the day in UTC+ timezones) */
@@ -59,16 +59,10 @@ export default function ExportModal({ title, name, url, onClose }) {
                     ))}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Start date" required>
-                        <input type="date" value={from} max={to || today}
-                            onChange={(e) => { setFrom(e.target.value); setError(""); }} className={inputCls} />
-                    </Field>
-                    <Field label="End date" required>
-                        <input type="date" value={to} min={from || undefined} max={today}
-                            onChange={(e) => { setTo(e.target.value); setError(""); }} className={inputCls} />
-                    </Field>
-                </div>
+                <Field label="Date range" required>
+                    <DatePicker range value={{ from, to }} max={today}
+                        onChange={(r) => { setFrom(r.from); setTo(r.to); setError(""); }} />
+                </Field>
 
                 {error && (
                     <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">{error}</div>

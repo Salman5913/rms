@@ -15,12 +15,28 @@ Stack: Laravel 13, PHP 8.3, MySQL, Sanctum (Bearer tokens), PHPUnit feature test
 
 ## 2. Golden rules
 1. **Reuse before you create.** Use the shared backend classes and React components listed in §4. A new component or helper is only allowed when nothing existing fits. If that happens, put it in the shared file (`ui.jsx`, `Crud.jsx`, `utils.jsx`) so other modules can reuse it, and tell me why.
-2. **Follow the existing flow.** Use the reference modules (`Labour`, `DeliveryArea`) as templates. Use the same naming, file locations, route shape, response shape and UI style.
+2. **Follow the existing flow.** Use the reference modules (`Employee`, `DeliveryArea`) as templates. Use the same naming, file locations, route shape, response shape and UI style.
 3. **Every new module gets permissions on the Role module and guarded pages.** See §5. A module is not finished without this.
 4. **Change only what the task needs.** No drive-by refactors, renames or reformatting of unrelated code. If you notice something broken elsewhere, report it; don't fix it silently.
 5. **Keep in-sync lists in sync** (§6). Most bugs here come from a module key that was added in one list and forgotten in another.
 6. When a rule here conflicts with the existing code, tell me before choosing.
 7. **Questions and bug reports get an answer, not a change.** If I only ask something or report a problem ("why is X not showing?", "is this done?"), don't edit any file. First tell me the reason or answer, then propose the change and ask whether to make it. Change code only after I say yes.
+8. **MOST IMPORTANT: optimized queries in every API you create or touch.** No endpoint may put load on the server or run slowly. Follow §2.1 on every new API and on every change to an existing one.
+9. **Simple, understandable code in every API you create or touch.** A junior developer must be able to read it top to bottom: small methods with plain names (`totalForRange()`, `categoryTotals()`), no clever abstractions, comments only where the "why" isn't obvious.
+10. **Every listing endpoint is paginated.** Never return an unbounded list. `CrudPage` modules get this from `ApiCrudController`; custom pages paginate in their service and show `Pagination` under the table. **Never change the pagination (page size, params, behaviour) of an existing custom module.**
+
+### 2.1 Query performance (applies to every new API and every change to an existing one)
+- Calculate totals in the database (`SUM` / `COUNT` / `GROUP BY`). Never load rows into PHP to sum or count them.
+- No N+1 queries: eager-load relations with only the columns needed, e.g. `with('category:id,name')`.
+- Select only the columns the screen uses (`->select([...])` / `->get([...])`), not `SELECT *`.
+- Filter dates on the column directly (`whereBetween('date_col', [$from, $to])`, `>=` / `<=`). Never wrap the column in `whereDate()`, `DATE()` or any function: it stops index use.
+- Paginate every list (rule 10). Print endpoints may return all rows of a range, but cap them (e.g. 5,000) and say so when the cap is hit.
+- Build a filtered query once (one small service method for date range / filters / search) and reuse it for the list, its totals and its print, so the figures always match.
+- Grouped totals are one `GROUP BY` query, not one query per group.
+- "Does X exist?" checks use `->exists()`, not `->count()` or loading rows.
+- Add indexes in the migration for the columns you filter, join or group on.
+- Tests assert the query count of list/report endpoints stays small and doesn't grow with the number of rows (`DB::enableQueryLog()`; same count with 5 and 50 rows).
+- Applies to new code and to code you are changing for the task. Don't refactor other existing modules unless asked (rule 4); report slow queries you notice instead.
 
 ## 3. Architecture (how the app works)
 
@@ -32,9 +48,9 @@ Stack: Laravel 13, PHP 8.3, MySQL, Sanctum (Bearer tokens), PHPUnit feature test
   - Imports: `admin/import/{module}` (one method per module in `ImportController`) and `admin/import/{module}/sample`.
 - `app/Http/Controllers/Admin/ApiCrudController.php` is the **generic CRUD base**: search, pagination (`per_page`, default 10), `?all=1`, `?export=csv` with date range (`FiltersByDateRange`), bulk delete, and store/update wrapped in a DB transaction.
   A concrete controller only defines `$model`, `$search`, `$with`, `rules()`, `fields()`, `syncRelations()`, and optionally `filter()` for extra query-string filters.
-- Validation: put rules in a `FormRequest` (e.g. `LabourRequest`). Reuse that FormRequest's `rules()` in **both** the controller's `rules()` and the import config, as Labour does. Inline rules in `rules()` are acceptable for very small modules (DeliveryArea), but prefer a FormRequest for anything new.
+- Validation: put rules in a `FormRequest` (e.g. `EmployeeRequest`). Reuse that FormRequest's `rules()` in **both** the controller's `rules()` and the import config, as Employee does. Inline rules in `rules()` are acceptable for very small modules (DeliveryArea), but prefer a FormRequest for anything new.
 - Responses: return models with `response()->json(...)`, as `ApiCrudController` does. Don't add a separate Actions/Services/API Resources layer for a normal CRUD module. Only use one for real business logic (orders, stock) and only after asking.
-- Models: `$fillable`, `$casts` (booleans!), constants for enum-like values (`Labour::USER_TYPES`), and scopes or rule helpers for reusable queries (`scopeActiveRiders`, `activeRiderRule()`).
+- Models: `$fillable`, `$casts` (booleans!), constants for enum-like values (`Employee::USER_TYPES`), and scopes or rule helpers for reusable queries (`scopeActiveRiders`, `activeRiderRule()`).
 - Imports: `app/Helpers/ImportHelper.php` handles CSV/.xlsx. Each module adds a `xxxConfig()` (`columns`, `rules`, `booleans`, `lists`, `prepare`, `after`), a public method that calls `$this->run(...)`, and an entry in `sample()`.
 - Permissions:
   - `roles` + `role_permissions` (`module`, `can_view`, `can_create`, `can_edit`, `can_delete`).
@@ -61,6 +77,8 @@ Stack: Laravel 13, PHP 8.3, MySQL, Sanctum (Bearer tokens), PHPUnit feature test
 | List page with search, pagination, create/edit/delete buttons, bulk delete, import, export | `CrudPage` from `Crud.jsx` (props: `title`, `endpoint`, `columns`, `searchPlaceholder`, `params`, `filters`, `canCreate`, `canImport`, `canExport`, `extraActions`, `module`) |
 | Create / edit / view form | `CrudForm` from `Crud.jsx` (props: `title`, `endpoint`, `fields`, `backTo`, `module`). Field types: text, `number`, `email`, `password`, `select` (`options`), `checkbox`, or a custom `render: (p) => <Comp {...p} />` |
 | Inputs | `Field`, `inputCls`, `Select` (searchable), `MultiSelect` (`endpoint`), `ImageUpload`, `Btn`, `Spinner`, `Pagination`, `Ico` from `ui.jsx` |
+| Status in a list column | `StatusText` from `ui.jsx` (`render: (r) => <StatusText on={r.status} />`) |
+| Secondary row actions in a list ("⋯" menu) | `ActionMenu` from `ui.jsx` (items: `label`, `icon`, `to` or `onClick`, `className`; falsy items are skipped) |
 | Confirm / alert dialogs | `useDialog()` from `Dialog.jsx`. Never use `window.alert/confirm` |
 | CSV export with date range | `ExportModal.jsx` + `utils.jsx` `handleExport` (CrudPage already uses it) |
 | Date display | `formatDateTime` from `utils.jsx` |
@@ -69,7 +87,14 @@ Stack: Laravel 13, PHP 8.3, MySQL, Sanctum (Bearer tokens), PHPUnit feature test
 | Backend import | `ImportHelper` via `ImportController` |
 | Date-range filtering / export file names | `FiltersByDateRange` trait |
 
-Styling: Tailwind with the existing look (white `rounded-2xl` cards, `border-slate-200`, `brand-*` colours from `tailwind.config.js`, status shown as `✅ Active` / `⛔ Disabled`). Copy classes from existing pages; don't introduce a new UI library.
+Styling: Tailwind with the existing look (white `rounded-2xl` cards, `border-slate-200`, `brand-*` colours from `tailwind.config.js`, status in list pages shown as coloured text with `StatusText` from `ui.jsx` (green "Active" / grey "Disabled"; pass `onText`/`offText` for other pairs), no emojis. Order pages keep their own status style). Copy classes from existing pages; don't introduce a new UI library.
+
+**Same layout as the existing modules.** When you build a new list, modal or row action, first find the closest existing one and copy its layout, order and wording. Don't invent your own arrangement:
+- **List row actions:** the main icon buttons go first (View / Edit / Delete, same order and classes as `CrudPage`). Every other action goes into **one** `ActionMenu` ("⋯") at the end of the row, like the Vendors list (Ledger, Add purchase, Add payment). Don't add extra separate icon buttons for secondary actions.
+- **Modal footer:** use `Modal` from `ui.jsx` with the buttons in this order: Cancel · Save & Print (only when the entry has a printout) · Save. The print button is always labelled "Save & Print", never just "Print".
+- **Report / list page order:** header (title + buttons) → totals cards → filters card → table → pagination, like the Loans page. Totals never go below the filters.
+- **Prints:** whenever a page gets an A4 print, also add a **short receipt for the 80mm thermal printer** from the same data and filters (copy `printShortLedger` in `Vendors.jsx`: monospace, 280px wide, `@page { size: 80mm auto }`). Header buttons in this order: "Print Short Receipt" · "Print <Report/Ledger>", with the `print` icon. Both use `printHtml` + `escapeHtml` from `utils.jsx`.
+- If no existing module has the thing you need, tell me which layout you chose and why.
 
 ## 5. New module checklist (MANDATORY — do every step)
 
@@ -79,7 +104,7 @@ Styling: Tailwind with the existing look (white `rounded-2xl` cards, `border-sla
 1. Migration: a **new** file in `database/migrations` (`YYYY_MM_DD_NNNNNN_create_<table>_table.php`). Never edit an existing migration. Write it but **don't run it** (see §8).
 2. Model in `app/Models` with `$fillable`, `$casts`, and constants for fixed value lists.
 3. `FormRequest` in `app/Http/Requests` for validation.
-4. Controller in `app/Http/Controllers/Admin` extending `ApiCrudController` (copy `LabourController`).
+4. Controller in `app/Http/Controllers/Admin` extending `ApiCrudController` (copy `EmployeeController`).
 5. Route: add `'<key>' => XController::class` to the CRUD `foreach` map in `routes/api.php`. Non-CRUD endpoints go next to it with explicit routes.
 6. **Backend permission enforcement:** apply `permission:<key>,<action>` middleware to the new module's routes (index/show/all → `view`, store → `create`, update → `edit`, destroy/bulk-delete → `delete`). Import → `create`. Without this, a direct API call bypasses the role check. (Note: the existing modules in the `foreach` don't have this middleware yet. See §9.)
 7. **Role module:** add `<key>` to `RoleController::MODULES`. Otherwise the role form rejects the permission with a 422.
@@ -89,7 +114,7 @@ Styling: Tailwind with the existing look (white `rounded-2xl` cards, `border-sla
 
 9. **Role permission matrix + redirects:** add `{ key: "<key>", label, path }` to the right group in `MODULE_GROUPS` (`modules.js`). This makes it appear in the Roles → Module Permissions matrix with view/create/edit/delete.
 10. **Sidebar:** add the item to `NAV` in `Layout.jsx` with `module: "<key>"` (plus an `ICON` entry if you need a new icon). Keep the same order and grouping as `MODULE_GROUPS`.
-11. Page in `resources/js/pages/<Name>.jsx` using `CrudPage` + `CrudForm` with nested `<Routes>`: index, `create`, `:id` (view), `:id/edit` (copy `Labours.jsx`).
+11. Page in `resources/js/pages/<Name>.jsx` using `CrudPage` + `CrudForm` with nested `<Routes>`: index, `create`, `:id` (view), `:id/edit` (copy `Employees.jsx`).
 12. **Direct-URL protection:** register the route in `app.jsx`.
     - Pages built with `CrudPage`/`CrudForm` already wrap themselves in `RequirePermission` (view/create/edit/view). Register them as `path="<key>/*"`.
     - **Any custom page or sub-route that is not `CrudPage`/`CrudForm` must be wrapped with `guard("<key>", "<action>", <Page />)`**: view for lists/details, create for create pages, edit for edit pages.
@@ -107,7 +132,7 @@ Styling: Tailwind with the existing look (white `rounded-2xl` cards, `border-sla
 | Thing | Where it lives |
 |---|---|
 | Permission module keys | `RoleController::MODULES` ⇄ `resources/js/modules.js` `MODULE_GROUPS` ⇄ `Layout.jsx` `NAV[].module` ⇄ route `guard(...)` / `CrudPage` endpoint |
-| Enum values | Model constants (e.g. `Labour::USER_TYPES`) ⇄ the matching JS arrays in the page (e.g. `USER_TYPES` in `Labours.jsx`) |
+| Enum values | Model constants (e.g. `Employee::USER_TYPES`) ⇄ the matching JS arrays in the page (e.g. `USER_TYPES` in `Employees.jsx`) |
 | Validation | FormRequest `rules()` ⇄ ImportController config `rules` |
 | Order types | `order.type` ⇄ `orderModule(type)` → `<type>-orders` permission modules |
 
@@ -128,7 +153,7 @@ Styling: Tailwind with the existing look (white `rounded-2xl` cards, `border-sla
 
 ## 9. Known gaps (don't "fix" these unless asked; mention them when relevant)
 - Existing admin CRUD and order routes don't apply the `permission` middleware, so the API itself doesn't enforce roles for them yet (only the UI does). New modules must apply it (§5.6).
-- The `labours`, `products`, `extras`, `options`, `categories`, `deals`, `delivery-areas`, `stock-items`, `users`, `roles` and `orders/:id`, `orders/:id/edit` routes in `app.jsx` rely on `CrudPage`/`CrudForm` or the page itself for permission checks. Check this when you touch them.
+- The `employees`, `products`, `extras`, `options`, `categories`, `deals`, `delivery-areas`, `stock-items`, `users`, `roles` and `orders/:id`, `orders/:id/edit` routes in `app.jsx` rely on `CrudPage`/`CrudForm` or the page itself for permission checks. Check this when you touch them.
 
 ## 10. Don'ts
 - Don't read `vendor/`, `storage/`, `bootstrap/cache/`, `node_modules/` or `.env`.

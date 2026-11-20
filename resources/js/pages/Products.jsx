@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
-import { CrudPage, CrudForm } from "../Crud";
+import { CrudPage, CrudForm, STATUS_FILTER } from "../Crud";
+import { StatusText } from "../ui";
 
 const availabilityOptions = [
     { value: "website", label: "For Website" },
@@ -14,7 +15,7 @@ const columns = [
     { key: "categories", label: "Categories", render: (r) => r.categories?.map((c) => c.name).join(", ") || "—" },
     { key: "availability", label: "Availability", render: (r) => availabilityOptions.find((o) => o.value === r.availability)?.label },
     { key: "is_popular", label: "Popular", render: (r) => (r.is_popular ? "🔥" : "—") },
-    { key: "status", label: "Status", render: (r) => (r.status ? "✅" : "⛔") },
+    { key: "status", label: "Status", filter: STATUS_FILTER, render: (r) => <StatusText on={r.status} /> },
 ];
 
 const fields = [

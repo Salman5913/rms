@@ -68,6 +68,60 @@ class RolePermissionTest extends TestCase
             ->assertJsonPath('permissions.0.can_edit', true);
     }
 
+    public function test_it_accepts_the_vendors_module(): void
+    {
+        $this->postJson('/api/admin/roles', [
+            'name' => 'Purchaser',
+            'permissions' => [['module' => 'vendors', 'can_view' => true, 'can_create' => true, 'can_edit' => true, 'can_delete' => true]],
+        ])->assertCreated()
+            ->assertJsonPath('permissions.0.module', 'vendors')
+            ->assertJsonPath('permissions.0.can_delete', true);
+    }
+
+    public function test_it_accepts_the_customers_module(): void
+    {
+        $this->postJson('/api/admin/roles', [
+            'name' => 'Order Taker',
+            'permissions' => [['module' => 'customers', 'can_view' => true, 'can_create' => true, 'can_edit' => true, 'can_delete' => false]],
+        ])->assertCreated()
+            ->assertJsonPath('permissions.0.module', 'customers')
+            ->assertJsonPath('permissions.0.can_edit', true);
+    }
+
+    public function test_it_accepts_the_loans_module(): void
+    {
+        $this->postJson('/api/admin/roles', [
+            'name' => 'Accountant',
+            'permissions' => [['module' => 'loans', 'can_view' => true, 'can_create' => true, 'can_edit' => true, 'can_delete' => true]],
+        ])->assertCreated()
+            ->assertJsonPath('permissions.0.module', 'loans')
+            ->assertJsonPath('permissions.0.can_delete', true);
+    }
+
+    public function test_it_accepts_the_expense_modules(): void
+    {
+        $this->postJson('/api/admin/roles', [
+            'name' => 'Expense Clerk',
+            'permissions' => [
+                ['module' => 'expenses', 'can_view' => true, 'can_create' => true, 'can_edit' => true, 'can_delete' => true],
+                ['module' => 'expense-categories', 'can_view' => true, 'can_create' => true, 'can_edit' => false, 'can_delete' => false],
+            ],
+        ])->assertCreated()
+            ->assertJsonPath('permissions.0.module', 'expenses')
+            ->assertJsonPath('permissions.1.module', 'expense-categories')
+            ->assertJsonPath('permissions.0.can_create', true);
+    }
+
+    public function test_it_accepts_the_employee_payments_module(): void
+    {
+        $this->postJson('/api/admin/roles', [
+            'name' => 'Payroll Clerk',
+            'permissions' => [['module' => 'employee-payments', 'can_view' => true, 'can_create' => true, 'can_edit' => true, 'can_delete' => true]],
+        ])->assertCreated()
+            ->assertJsonPath('permissions.0.module', 'employee-payments')
+            ->assertJsonPath('permissions.0.can_create', true);
+    }
+
     public function test_me_exposes_delete_permission(): void
     {
         $role = Role::create(['name' => 'Waiter', 'code' => 'waiter']);

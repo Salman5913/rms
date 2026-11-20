@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../api";
-import { Btn, Ico, Pagination, Select, Spinner, inputCls } from "../ui";
+import { Btn, ColumnFilter, DatePicker, Ico, Pagination, Select, Spinner, TableBody, inputCls, useLoading } from "../ui";
 import { formatDateTime } from "../utils";
 import ExportModal from "../ExportModal";
 import { useAuth, useRedirectBack } from "../auth";
 import { MODULES, orderModule } from "../modules";
-import { DeliveryStatusSelect, RiderSelect, useRiders } from "../delivery";
+import { DeliveryStatusSelect, RiderSelect, riderFilterOptions, useRiders } from "../delivery";
 import { useDialog } from "../Dialog";
 
 const rs = (v) => `Rs. ${Number(v).toLocaleString()}`;
@@ -43,20 +43,30 @@ export function StatusSelect({ order, onChanged }) {
 
 export default function WebsiteOrders() {
     const [data, setData] = useState(null);
+    const [loading, track] = useLoading();
     const [search, setSearch] = useState("");
+    const [range, setRange] = useState({ from: "", to: "" }); // created-date filter, empty = all dates
     const [page, setPage] = useState(1);
     const [exportOpen, setExportOpen] = useState(false);
     const nav = useNavigate();   // ← move here
     const allowEdit = useAuth().can("website-orders", "edit");
     const riders = useRiders();
+    const allRiders = useRiders(true);
+    // column filters (?status= / ?rider_id=), "" = all
+    const [statusFilter, setStatusFilter] = useState("");
+    const [riderFilter, setRiderFilter] = useState("");
+    const filterParams = { status: statusFilter || undefined, rider_id: riderFilter || undefined };
 
-    const load = (p = page, s = search) =>
-        api.get("/admin/orders", { params: { type: "website", search: s, page: p } }).then((r) => {
-            if (r.data.data.length === 0 && p > 1) return load(p - 1, s);
+    // `quiet` reloads (after a rider / status change in a row) keep the rows on screen instead of showing the loader
+    const load = (p = page, s = search, quiet = false) => {
+        const request = api.get("/admin/orders", { params: { type: "website", search: s, page: p, from: range.from || undefined, to: range.to || undefined, ...filterParams } }).then((r) => {
+            if (r.data.data.length === 0 && p > 1) return load(p - 1, s, quiet);
             setData(r.data); setPage(r.data.current_page);
         });
-    // runs on mount and whenever the search changes; a new search starts from page 1
-    useEffect(() => { const t = setTimeout(() => load(1, search), 300); return () => clearTimeout(t); }, [search]); // eslint-disable-line
+        return quiet ? request : track(request);
+    };
+    // runs on mount and whenever the search, date range or a column filter changes; a new filter starts from page 1
+    useEffect(() => { const t = setTimeout(() => load(1, search), 300); return () => clearTimeout(t); }, [search, range, statusFilter, riderFilter]); // eslint-disable-line
 
     if (!data) return <Spinner />;
 
@@ -64,8 +74,9 @@ export default function WebsiteOrders() {
         <div>
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <h2 className="text-xl font-extrabold text-slate-800">Website Orders</h2>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
                     <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order # / customer…" className={inputCls + " !w-64"} />
+                    <DatePicker range clearable value={range} onChange={setRange} placeholder="All dates" className="w-64" />
                     <Btn
                         onClick={() => setExportOpen(true)}
                         className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -85,14 +96,19 @@ export default function WebsiteOrders() {
                             <th className="p-3 font-semibold whitespace-nowrap">Delivery Area</th>
                             <th className="p-3 font-semibold">Total</th>
                             <th className="p-3 font-semibold whitespace-nowrap">Delivery Charges</th>
-                            <th className="p-3 font-semibold">Rider</th>
-                            <th className="p-3 font-semibold">Status</th>
+                            <th className="p-3 font-semibold">
+                                <ColumnFilter label="Rider" value={riderFilter} onChange={setRiderFilter} options={riderFilterOptions(allRiders)} searchable />
+                            </th>
+                            <th className="p-3 font-semibold">
+                                <ColumnFilter label="Status" value={statusFilter} onChange={setStatusFilter}
+                                    options={statusesFor("website").map((s) => ({ value: s, label: STATUS_LABEL[s] }))} />
+                            </th>
                             <th className="p-3 font-semibold whitespace-nowrap">Order Date</th>
                             {/* pinned so the action buttons stay visible when the table scrolls sideways */}
-                            <th className="p-3 text-right sticky right-0 bg-slate-50 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">Actions</th>
+                            <th className="p-3 text-center sticky right-0 bg-slate-50 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)]">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <TableBody loading={loading} cols={10}>
                         {data.data.map((o) => {
                             const rowBg = !o.is_viewed ? "bg-yellow-50 group-hover:bg-yellow-100" : "bg-white group-hover:bg-slate-50";
                             return (
@@ -113,14 +129,14 @@ export default function WebsiteOrders() {
                                 <td className="p-3 whitespace-nowrap font-bold text-slate-800">{rs(o.total)}</td>
                                 <td className="p-3 whitespace-nowrap">{rs(o.delivery_charges ?? 0)}</td>
                                 <td className="p-3" onClick={(e) => e.stopPropagation()}>
-                                    <RiderSelect order={o} riders={riders} disabled={!allowEdit} onChanged={() => load()} />
+                                    <RiderSelect order={o} riders={riders} disabled={!allowEdit} onChanged={() => load(page, search, true)} />
                                 </td>
                                 <td className="p-3" onClick={(e) => e.stopPropagation()}>
-                                    <StatusSelect order={o} onChanged={() => load()} />
+                                    <StatusSelect order={o} onChanged={() => load(page, search, true)} />
                                 </td>
                                 <td className="p-3 text-slate-400 text-xs whitespace-nowrap">{formatDateTime(o.created_at)}</td>
-                                <td className={"p-3 text-right sticky right-0 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)] " + rowBg} onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex justify-end gap-1.5">
+                                <td className={"p-3 text-center sticky right-0 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.12)] " + rowBg} onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex justify-center gap-1.5">
                                         <Link to={`/orders/${o.id}`} title="View" className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center"><Ico n="eye" /></Link>
                                         {allowEdit && (o.status === "RECEIVED"
                                             ? <Link to={`/orders/${o.id}/edit`} title="Edit" className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center"><Ico n="edit" /></Link>
@@ -131,11 +147,11 @@ export default function WebsiteOrders() {
                             );
                         })}
                         {data.data.length === 0 && <tr><td colSpan={10}className="p-10 text-center text-slate-300">No orders yet</td></tr>}
-                    </tbody>
+                    </TableBody>
                 </table>
             </div>
             <Pagination data={data} onPage={(p) => load(p)} />
-            {exportOpen && <ExportModal title="Website Orders" name="Website-Orders" url="/api/admin/orders?type=website&export=csv" onClose={() => setExportOpen(false)} />}
+            {exportOpen && <ExportModal title="Website Orders" name="Website-Orders" url={`/api/admin/orders?${new URLSearchParams({ type: "website", export: "csv", ...(statusFilter ? { status: statusFilter } : {}), ...(riderFilter ? { rider_id: riderFilter } : {}) })}`} onClose={() => setExportOpen(false)} />}
         </div>
     );
 }

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "./api";
-import { Btn, Ico, Field, ImageUpload, MultiSelect, Select, Spinner, inputCls } from "./ui";
+import { Btn, ColumnFilter, Ico, Field, ImageUpload, MultiSelect, Select, Spinner, TableBody, inputCls, useLoading } from "./ui";
 import ExportModal from "./ExportModal";
 import { useDialog } from "./Dialog";
 import { RequirePermission, useAuth } from "./auth";
@@ -9,7 +9,15 @@ import { RequirePermission, useAuth } from "./auth";
 /** "admin/stock-items" -> "stock-items" (CRUD endpoints are named after their permission module) */
 const moduleOf = (endpoint) => endpoint.replace(/^admin\//, "");
 
+/** column filter for Active / Disabled lists: { key: "status", ..., filter: STATUS_FILTER } (backend: ApiCrudController ?status=) */
+export const STATUS_FILTER = {
+    param: "status",
+    options: [{ value: "1", label: "Active" }, { value: "0", label: "Disabled" }],
+};
+
 /* ================= generic listing page ================= */
+/* A column can carry `filter: { param, options, searchable? }`: its header gets a filter icon and the
+   picked value is sent as ?<param>=<value> (list and export). */
 export function CrudPage(props) {
     const module = props.module ?? moduleOf(props.endpoint);
     return (
@@ -19,45 +27,70 @@ export function CrudPage(props) {
     );
 }
 
-function CrudPageInner({ title, endpoint, module, columns, searchPlaceholder = "Search…", canCreate = true, canImport = true, canExport = true, extraActions, params = {}, filters }) {
+/* summary(data, reload): optional content between the header and the table (e.g. totals cards).
+   extraActions(row, reload): extra row buttons; call reload() after they change data. */
+function CrudPageInner({ title, endpoint, module, columns, searchPlaceholder = "Search…", canCreate = true, canImport = true, canExport = true, extraActions, summary, params: baseParams = {}, filters }) {
     const { can } = useAuth();
     const allowCreate = canCreate && can(module, "create");
     const allowEdit = can(module, "edit");
     const allowDelete = can(module, "delete");
     const [data, setData] = useState(null);
+    const [error, setError] = useState("");
+    const [loading, track] = useLoading();
     const [page, setPage] = useState(1);
     const [search, setSearch] = useState("");
     const [selected, setSelected] = useState([]);
     const [importOpen, setImportOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
+    const [colFilters, setColFilters] = useState({}); // { [param]: value } from the column header filters
     const nav = useNavigate();
     const dialog = useDialog();
 
+    const params = { ...baseParams, ...Object.fromEntries(Object.entries(colFilters).filter(([, v]) => v !== "" && v != null)) };
     const paramsKey = JSON.stringify(params);
     const load = (p = page, s = search) =>
-        api.get(`/${endpoint}`, { params: { ...params, page: p, search: s } }).then((r) => setData(r.data));
+        track(api.get(`/${endpoint}`, { params: { ...params, page: p, search: s } })
+            .then((r) => { setData(r.data); setError(""); })
+            .catch((err) => setError(err.response?.data?.message ?? "The records could not be loaded.")));
 
     useEffect(() => { load(1); }, [endpoint]); // eslint-disable-line
     useEffect(() => { const t = setTimeout(() => load(1, search), 300); return () => clearTimeout(t); }, [search]); // eslint-disable-line
     // a changed filter starts again from page 1
-    const firstParams = useMemo(() => paramsKey, []); // eslint-disable-line
-    useEffect(() => { if (paramsKey !== firstParams) { setPage(1); setSelected([]); load(1); } }, [paramsKey]); // eslint-disable-line
+    // (compared with the previous filter, so clearing back to "no filter" reloads too)
+    const prevParams = useRef(paramsKey);
+    useEffect(() => {
+        if (paramsKey === prevParams.current) return;
+        prevParams.current = paramsKey;
+        setPage(1); setSelected([]); load(1);
+    }, [paramsKey]); // eslint-disable-line
 
     const toggleAll = (e) => setSelected(e.target.checked ? data.data.map((r) => r.id) : []);
     const toggleOne = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
     const bulkDelete = async () => {
         if (!selected.length || !(await dialog.confirm(`Delete ${selected.length} record(s)? This can't be undone.`, { title: "Delete records", okText: "Delete" }))) return;
-        await api.post(`/${endpoint}-bulk-delete`, { ids: selected });
-        setSelected([]); load(1);
+        try {
+            await api.post(`/${endpoint}-bulk-delete`, { ids: selected });
+            setSelected([]); load(1);
+        } catch (err) { deleteFailed(err); }
     };
 
     const destroy = async (id) => {
         if (!(await dialog.confirm("This record will be permanently deleted. This can't be undone.", { title: "Delete this record?", okText: "Delete" }))) return;
-        await api.delete(`/${endpoint}/${id}`); load();
+        try {
+            await api.delete(`/${endpoint}/${id}`); load();
+        } catch (err) { deleteFailed(err); }
     };
 
+    // e.g. 422 "vendors with purchases cannot be deleted"
+    const deleteFailed = (err) => dialog.alert(
+        Object.values(err.response?.data?.errors ?? {})[0]?.[0] ?? err.response?.data?.message ?? "The record could not be deleted.",
+        { title: "Can't delete", variant: "warning" });
+
     // const doExport = () => { window.open(`/api/${endpoint}?export=csv`, "_blank"); };
+
+    // first load: page loader; later reloads (search / filter / page) show the loader inside the table instead
+    if (!data) return error ? <p className="text-sm text-red-600">{error}</p> : <Spinner />;
 
     const rows = data?.data ?? [];
     const allChecked = rows.length > 0 && rows.every((r) => selected.includes(r.id));
@@ -78,16 +111,28 @@ function CrudPageInner({ title, endpoint, module, columns, searchPlaceholder = "
                 </div>
             </div>
 
+            {summary?.(data, () => load())}
+
+            {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">{error}</div>}
+
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 border-slate-200 overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="text-left text-slate-500 bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wide">
                             <th className="p-3 w-10"><input type="checkbox" checked={allChecked} onChange={toggleAll} className="accent-brand-600" /></th>
-                            {columns.map((c) => <th key={c.key} className="p-3 font-semibold">{c.label}</th>)}
-                            <th className="p-3 w-28 text-right">Actions</th>
+                            {columns.map((c) => (
+                                <th key={c.key} className="p-3 font-semibold">
+                                    {c.filter ? (
+                                        <ColumnFilter label={c.label} value={colFilters[c.filter.param] ?? ""} options={c.filter.options}
+                                            searchable={c.filter.searchable}
+                                            onChange={(v) => setColFilters((f) => ({ ...f, [c.filter.param]: v }))} />
+                                    ) : c.label}
+                                </th>
+                            ))}
+                            <th className="p-3 w-28 text-center">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <TableBody loading={loading} cols={columns.length + 2}>
                         {rows.map((row) => (
                             <tr key={row.id} className={"border-b border-slate-100 last:border-0 hover:bg-slate-50/70 " + (selected.includes(row.id) ? "bg-red-50/40" : "")}>
                                 <td className="p-3"><input type="checkbox" checked={selected.includes(row.id)} onChange={() => toggleOne(row.id)} className="accent-brand-600" /></td>
@@ -97,17 +142,17 @@ function CrudPageInner({ title, endpoint, module, columns, searchPlaceholder = "
                                     </td>
                                 ))}
                                 <td className="p-3">
-                                    <div className="flex justify-end gap-1.5">
+                                    <div className="flex justify-center gap-1.5">
                                         <Link to={`${row.id}`} title="View" className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center"><Ico n="eye" /></Link>
                                         {allowEdit && <Link to={`${row.id}/edit`} title="Edit" className="w-8 h-8 rounded-lg bg-brand-50 text-brand-600 hover:bg-brand-100 flex items-center justify-center"><Ico n="edit" /></Link>}
                                         {allowDelete && <button onClick={() => destroy(row.id)} title="Delete" className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center"><Ico n="trash" /></button>}
-                                        {extraActions?.(row)}
+                                        {extraActions?.(row, () => load())}
                                     </div>
                                 </td>
                             </tr>
                         ))}
                         {rows.length === 0 && <tr><td colSpan={columns.length + 2} className="p-10 text-center text-slate-300">No records found</td></tr>}
-                    </tbody>
+                    </TableBody>
                 </table>
             </div>
 
@@ -175,9 +220,12 @@ function CrudFormInner({ title, endpoint, fields, backTo }) {
 
     const set = (name, v) => setValues((s) => ({ ...s, [name]: v }));
 
+    // a field with show(values) is only displayed (and required) while show() is true
+    const visible = (f) => !f.show || f.show(values);
+
     const validate = () => {
         const e = {};
-        fields.forEach((f) => {
+        fields.filter(visible).forEach((f) => {
             if (f.required && (values[f.name] === "" || values[f.name] == null ||
                 (Array.isArray(values[f.name]) && values[f.name].length === 0))) {
                 e[f.name] = `${f.label} is required`;
@@ -200,8 +248,8 @@ function CrudFormInner({ title, endpoint, fields, backTo }) {
         } finally { setSaving(false); }
     };
 
-    const mainFields = fields.filter((f) => f.type !== "checkbox");
-    const checkFields = fields.filter((f) => f.type === "checkbox");
+    const mainFields = fields.filter((f) => f.type !== "checkbox" && visible(f));
+    const checkFields = fields.filter((f) => f.type === "checkbox" && visible(f));
 
     return (
         <div>

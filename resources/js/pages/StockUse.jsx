@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
 import { useAuth } from "../auth";
-import { Btn, Select, inputCls } from "../ui";
+import { Btn, Select, Spinner, inputCls } from "../ui";
 
 const emptyRow = () => ({ stock_item_id: "", value: "" });
 
 /** Stock Use Voucher: dynamic rows, items excluded once picked, zero-stock hidden. */
 export default function StockUse() {
-    const [items, setItems] = useState([]);
+    const [items, setItems] = useState(null);   // null until the stock items have loaded
     const [rows, setRows] = useState([emptyRow()]);
     const [error, setError] = useState("");
     const [saving, setSaving] = useState(false);
@@ -16,9 +16,9 @@ export default function StockUse() {
     const canCreate = useAuth().can("stock-use", "create");
 
     useEffect(() => {
-        api.get("/admin/stock-items", { params: { all: 1 } }).then((r) =>
-            setItems(r.data.filter((i) => Number(i.value) > 0)),
-        );
+        api.get("/admin/stock-items", { params: { all: 1 } })
+            .then((r) => setItems(r.data.filter((i) => Number(i.value) > 0)))
+            .catch((err) => setError(err.response?.data?.message ?? "The stock items could not be loaded."));
     }, []);
 
     const chosen = rows.map((r) => r.stock_item_id).filter(Boolean);
@@ -51,6 +51,8 @@ export default function StockUse() {
             setSaving(false);
         }
     };
+
+    if (!items) return error ? <p className="text-sm text-red-600">{error}</p> : <Spinner />;
 
     return (
         <div>

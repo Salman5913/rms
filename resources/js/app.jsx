@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AuthProvider, RequirePermission, homePathFor, useAuth } from "./auth";
 import Layout from "./Layout";
-import { Spinner } from "./ui";
+import { BootLoader } from "./ui";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Banners from "./pages/Banners";
@@ -17,7 +17,14 @@ import StockItems from "./pages/StockItems";
 import StockUse from "./pages/StockUse";
 import Users from "./pages/Users";
 import Roles from "./pages/Roles";
-import Labours from "./pages/Labours";
+import Employees from "./pages/Employees";
+import { EmployeeLedger, Payroll } from "./pages/EmployeePayments";
+import Vendors, { VendorLedger } from "./pages/Vendors";
+import Loans from "./pages/Loans";
+import LoanStatement from "./pages/LoanStatement";
+import Expenses from "./pages/Expenses";
+import ExpenseCategories from "./pages/ExpenseCategories";
+import Customers from "./pages/Customers";
 import WebsiteOrders, { WebsiteOrderView } from "./pages/WebsiteOrders";
 import PickupOrders, { PickupCreate } from "./pages/PickupOrders";
 import DineinOrders, { DineInCreate } from "./pages/DineinOrders";
@@ -29,9 +36,14 @@ import "./index.css";
 
 function Guard() {
     const { user, loading } = useAuth();
-    if (loading) return <Spinner />;
-    if (!user) return <Navigate to="/login" replace />;
-    return <Outlet />;
+    if (!loading && !user) return <Navigate to="/login" replace />;
+    // after a refresh the boot loader covers the page until the login check and the page's own data are loaded
+    return (
+        <>
+            {!loading && <Outlet />}
+            <BootLoader waiting={loading} />
+        </>
+    );
 }
 
 /** route element that needs `action` on `module`; direct URL access without it redirects back */
@@ -70,7 +82,16 @@ function App() {
                     <Route path="stock-use" element={guard("stock-use", "view", <StockUse />)} />
                     <Route path="users/*" element={<Users />} />
                     <Route path="roles/*" element={<Roles />} />
-                    <Route path="labours/*" element={<Labours />} />
+                    <Route path="employees/:id/ledger" element={guard("employee-payments", "view", <EmployeeLedger />)} />
+                    <Route path="employees/*" element={<Employees />} />
+                    <Route path="payroll" element={guard("employee-payments", "view", <Payroll />)} />
+                    <Route path="vendors/:id/ledger" element={guard("vendors", "view", <VendorLedger />)} />
+                    <Route path="vendors/*" element={<Vendors />} />
+                    <Route path="loans" element={guard("loans", "view", <Loans />)} />
+                    <Route path="loans/:id" element={guard("loans", "view", <LoanStatement />)} />
+                    <Route path="expenses" element={guard("expenses", "view", <Expenses />)} />
+                    <Route path="expense-categories/*" element={<ExpenseCategories />} />
+                    <Route path="customers/*" element={<Customers />} />
                     <Route path="daily-close" element={guard("daily-close", "view", <DailyClose />)} />
                     <Route path="orders/website" element={guard("website-orders", "view", <WebsiteOrders />)} />
                     <Route path="orders/:id" element={<WebsiteOrderView />} />

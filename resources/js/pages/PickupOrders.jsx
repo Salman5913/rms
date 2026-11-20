@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api";
-import { Btn, Ico, Pagination, Spinner, inputCls } from "../ui";
+import { Btn, DatePicker, Ico, Pagination, Spinner, TableBody, inputCls, useLoading } from "../ui";
 import { StatusSelect } from "./WebsiteOrders";
 import { formatDateTime } from "../utils";
 import ExportModal from "../ExportModal";
@@ -378,7 +378,9 @@ export default function PickupOrders() {
     const allowEdit = can("pickup-orders", "edit");
     const allowDelete = can("pickup-orders", "delete");
     const [data, setData] = useState(null);
+    const [loading, track] = useLoading();
     const [search, setSearch] = useState("");
+    const [range, setRange] = useState({ from: "", to: "" }); // created-date filter, empty = all dates
     const [page, setPage] = useState(1);
     const nav = useNavigate();
     const dialog = useDialog();
@@ -411,14 +413,14 @@ export default function PickupOrders() {
 
 
     const load = (p = page, s = search) =>
-        api.get("/admin/orders", { params: { type: "pickup", search: s, page: p } }).then((r) => {
+        track(api.get("/admin/orders", { params: { type: "pickup", search: s, page: p, from: range.from || undefined, to: range.to || undefined } }).then((r) => {
             // deleting the last row on the last page leaves it empty — step back one page
             if (r.data.data.length === 0 && p > 1) return load(p - 1, s);
             setData(r.data); setPage(r.data.current_page);
-        });
+        }));
     const goTo = (p) => { setSelected([]); load(p); };
-    // runs on mount and whenever the search changes; a new search starts from page 1
-    useEffect(() => { const t = setTimeout(() => load(1, search), 300); return () => clearTimeout(t); }, [search]); // eslint-disable-line
+    // runs on mount and whenever the search or date range changes; a new filter starts from page 1
+    useEffect(() => { const t = setTimeout(() => load(1, search), 300); return () => clearTimeout(t); }, [search, range]); // eslint-disable-line
 
     if (!data) return <Spinner />;
 
@@ -426,8 +428,9 @@ export default function PickupOrders() {
         <div>
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <h2 className="text-xl font-extrabold text-slate-800">Pickup Orders</h2>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
                     <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order # / customer…" className={inputCls + " !w-64"} />
+                    <DatePicker range clearable value={range} onChange={setRange} placeholder="All dates" className="w-64" />
                     <Btn
                         onClick={() => setExportOpen(true)}
                         className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -452,10 +455,10 @@ export default function PickupOrders() {
                             <th className="p-3 font-semibold">Total</th>
                             {/* <th className="p-3 font-semibold">Status</th> */}
                             <th className="p-3 font-semibold">Order Date</th>
-                            <th className="p-3 w-20 text-right">Actions</th>
+                            <th className="p-3 w-20 text-center">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <TableBody loading={loading} cols={6}>
                         {data.data.map((o) => (
                             <tr key={o.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
                                 <td className="p-3"><input type="checkbox" checked={selected.includes(o.id)} onChange={() => toggleOne(o.id)} className="accent-brand-600" /></td>
@@ -466,8 +469,8 @@ export default function PickupOrders() {
                                 <td className="p-3 font-bold">Rs. {Number(o.total).toLocaleString()}</td>
                                 {/* <td className="p-3"><StatusSelect order={o} onChanged={load} /></td> */}
                                 <td className="p-3 text-slate-400 text-xs">{formatDateTime(o.created_at)}</td>
-                                <td className="p-3 text-right">
-                                    <div className="flex justify-end gap-1.5">
+                                <td className="p-3 text-center">
+                                    <div className="flex justify-center gap-1.5">
                                         <Link to={`/orders/${o.id}`} className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center"><Ico n="eye" /></Link>
                                         {allowEdit && <Link to={`/orders/${o.id}/edit`} title="Edit" className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center"><Ico n="edit" /></Link>}
                                         {allowDelete && <button onClick={() => destroy(o.id)} title="Delete" className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center"><Ico n="trash" /></button>}
@@ -476,7 +479,7 @@ export default function PickupOrders() {
                             </tr>
                         ))}
                         {data.data.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-slate-300">No pickup orders yet</td></tr>}
-                    </tbody>
+                    </TableBody>
                 </table>
             </div>
             <Pagination data={data} onPage={goTo} />

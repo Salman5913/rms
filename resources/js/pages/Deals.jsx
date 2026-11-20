@@ -1,12 +1,13 @@
 import { Route, Routes } from "react-router-dom";
-import { CrudPage, CrudForm } from "../Crud";
+import { CrudPage, CrudForm, STATUS_FILTER } from "../Crud";
+import { StatusText } from "../ui";
 
 const columns = [
     { key: "name", label: "Deal Name" },
     { key: "price", label: "Price", render: (r) => `Rs. ${Number(r.price).toLocaleString()}` },
     { key: "badge", label: "Badge" },
     { key: "products", label: "Products", render: (r) => r.products?.map((p) => p.name).join(", ") || "—" },
-    { key: "status", label: "Status", render: (r) => (r.status ? "✅" : "⛔") },
+    { key: "status", label: "Status", filter: STATUS_FILTER, render: (r) => <StatusText on={r.status} /> },
 ];
 
 const fields = [

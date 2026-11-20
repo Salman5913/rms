@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Labour;
+use App\Models\Employee;
 use Illuminate\Foundation\Http\FormRequest;
 
 class AssignRiderRequest extends FormRequest
@@ -14,7 +14,7 @@ class AssignRiderRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['rider_id' => ['present', 'nullable', 'integer', Labour::activeRiderRule()]];
+        return ['rider_id' => ['present', 'nullable', 'integer', Employee::activeRiderRule()]];
     }
 
     public function messages(): array

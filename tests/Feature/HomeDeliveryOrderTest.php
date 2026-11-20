@@ -25,9 +25,12 @@ class HomeDeliveryOrderTest extends TestCase
             'database/migrations/2026_11_17_000002_add_delivery_fields_to_orders.php',
             'database/migrations/2026_11_17_000003_relax_order_type_and_customer_name.php',
             'database/migrations/2026_11_17_000004_create_labours_table.php',
+            'database/migrations/2026_11_19_000003_rename_labours_to_employees.php',
             'database/migrations/2026_11_17_000005_add_rider_to_orders.php',
             'database/migrations/2026_11_17_000006_add_cancelled_status_to_orders.php',
             'database/migrations/2026_11_17_000007_create_daily_closes_table.php',
+            // delivery and website orders save first-time customers
+            'database/migrations/2026_11_20_000001_create_customers_table.php',
         ]]);
 
         Sanctum::actingAs(User::forceCreate([

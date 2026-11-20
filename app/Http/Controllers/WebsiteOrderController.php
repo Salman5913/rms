@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Customer;
 use App\Models\Order;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -46,6 +47,8 @@ class WebsiteOrderController extends Controller
                     'modifiers'  => $i['modifiers'] ?? [],
                 ]);
             }
+            // a first-time website customer is saved for the phone lookup on admin orders
+            Customer::rememberFromOrder($data['customer_name'], $data['customer_phone'], $data['address']);
             return $order;
         });
 

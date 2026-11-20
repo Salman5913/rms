@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\DeliveryArea;
-use App\Models\Labour;
+use App\Models\Employee;
 use App\Models\Order;
 use App\Models\User;
 use Laravel\Sanctum\Sanctum;
@@ -29,9 +29,12 @@ class HomeDeliveryRiderTest extends TestCase
             'database/migrations/2026_11_17_000002_add_delivery_fields_to_orders.php',
             'database/migrations/2026_11_17_000003_relax_order_type_and_customer_name.php',
             'database/migrations/2026_11_17_000004_create_labours_table.php',
+            'database/migrations/2026_11_19_000003_rename_labours_to_employees.php',
             'database/migrations/2026_11_17_000005_add_rider_to_orders.php',
             'database/migrations/2026_11_17_000006_add_cancelled_status_to_orders.php',
             'database/migrations/2026_11_17_000007_create_daily_closes_table.php',
+            // delivery and website orders save first-time customers
+            'database/migrations/2026_11_20_000001_create_customers_table.php',
         ]]);
 
         Sanctum::actingAs(User::forceCreate([
@@ -41,9 +44,9 @@ class HomeDeliveryRiderTest extends TestCase
         $this->area = DeliveryArea::create(['name' => 'Gulberg', 'delivery_charges' => 150, 'status' => true]);
     }
 
-    private function labour(array $attrs = []): Labour
+    private function employee(array $attrs = []): Employee
     {
-        return Labour::create($attrs + ['name' => 'Bilal', 'phone' => '03111111111', 'user_type' => 'rider', 'pay_type' => 'daily', 'status' => true]);
+        return Employee::create($attrs + ['name' => 'Bilal', 'phone' => '03111111111', 'user_type' => 'rider', 'pay_type' => 'daily', 'status' => true]);
     }
 
     private function payload(array $overrides = []): array
@@ -74,7 +77,7 @@ class HomeDeliveryRiderTest extends TestCase
 
     public function test_it_saves_customer_details_and_a_rider_name_snapshot(): void
     {
-        $rider = $this->labour();
+        $rider = $this->employee();
 
         $this->postJson('/api/admin/orders', $this->payload(['rider_id' => $rider->id, 'rider_name' => 'Spoofed']))
             ->assertCreated()
@@ -83,7 +86,7 @@ class HomeDeliveryRiderTest extends TestCase
             ->assertJsonPath('rider_id', $rider->id)
             ->assertJsonPath('rider_name', 'Bilal');
 
-        // snapshot: renaming the labour later doesn't change the order
+        // snapshot: renaming the employee later doesn't change the order
         $rider->update(['name' => 'Bilal Khan']);
         $this->assertSame('Bilal', Order::first()->rider_name);
     }
@@ -96,10 +99,10 @@ class HomeDeliveryRiderTest extends TestCase
             ->assertJsonPath('rider_name', null);
     }
 
-    public function test_it_rejects_a_non_rider_or_inactive_labour(): void
+    public function test_it_rejects_a_non_rider_or_inactive_employee(): void
     {
-        $cook = $this->labour(['name' => 'Cook', 'user_type' => 'cook']);
-        $inactive = $this->labour(['name' => 'Gone', 'status' => false]);
+        $cook = $this->employee(['name' => 'Cook', 'user_type' => 'cook']);
+        $inactive = $this->employee(['name' => 'Gone', 'status' => false]);
 
         foreach ([$cook->id, $inactive->id, 999] as $id) {
             $this->postJson('/api/admin/orders', $this->payload(['rider_id' => $id]))
@@ -110,8 +113,8 @@ class HomeDeliveryRiderTest extends TestCase
 
     public function test_update_changes_customer_fields_and_rider_and_keeps_totals_right(): void
     {
-        $first = $this->labour();
-        $second = $this->labour(['name' => 'Hamza']);
+        $first = $this->employee();
+        $second = $this->employee(['name' => 'Hamza']);
         $id = $this->postJson('/api/admin/orders', $this->payload(['rider_id' => $first->id]))->json('id');
 
         $this->postJson("/api/admin/orders/$id", [
@@ -138,7 +141,7 @@ class HomeDeliveryRiderTest extends TestCase
 
     public function test_update_rejects_blank_customer_fields_and_bad_rider(): void
     {
-        $cook = $this->labour(['user_type' => 'cook']);
+        $cook = $this->employee(['user_type' => 'cook']);
         $id = $this->postJson('/api/admin/orders', $this->payload())->json('id');
 
         $this->postJson("/api/admin/orders/$id", [
@@ -156,7 +159,7 @@ class HomeDeliveryRiderTest extends TestCase
             ->assertJsonPath('message', 'Assign a rider before marking this order Out for delivery.');
         $this->assertSame('RECEIVED', Order::find($id)->status);
 
-        $rider = $this->labour();
+        $rider = $this->employee();
         $this->postJson("/api/admin/orders/$id/rider", ['rider_id' => $rider->id])
             ->assertOk()->assertJsonPath('rider_name', 'Bilal');
 
@@ -167,7 +170,7 @@ class HomeDeliveryRiderTest extends TestCase
 
     public function test_out_for_delivery_order_must_keep_its_rider(): void
     {
-        $rider = $this->labour();
+        $rider = $this->employee();
         $id = $this->postJson('/api/admin/orders', $this->payload(['rider_id' => $rider->id]))->json('id');
         $this->postJson("/api/admin/orders/$id/status", ['status' => 'OUT_FOR_DELIVERY'])->assertOk();
 
@@ -209,7 +212,7 @@ class HomeDeliveryRiderTest extends TestCase
         // website orders keep their own statuses
         $this->postJson("/api/admin/orders/{$order->id}/status", ['status' => 'PREPARING'])->assertOk();
 
-        $rider = $this->labour();
+        $rider = $this->employee();
         $this->postJson("/api/admin/orders/{$order->id}/rider", ['rider_id' => $rider->id])
             ->assertOk()->assertJsonPath('rider_name', 'Bilal');
         $this->postJson("/api/admin/orders/{$order->id}/status", ['status' => 'OUT_FOR_DELIVERY'])->assertOk();
@@ -220,7 +223,7 @@ class HomeDeliveryRiderTest extends TestCase
     public function test_website_order_edit_changes_customer_fields_and_rider(): void
     {
         $order = $this->websiteOrder();
-        $rider = $this->labour();
+        $rider = $this->employee();
 
         $this->postJson("/api/admin/orders/{$order->id}", [
             'items' => [['name' => 'Burger', 'unit_price' => 500, 'qty' => 1]],
@@ -287,7 +290,7 @@ class HomeDeliveryRiderTest extends TestCase
 
     public function test_dashboard_counts_website_and_delivery_sales_only_when_delivered(): void
     {
-        $rider = $this->labour();
+        $rider = $this->employee();
         // delivery: 1000, plus 150 charges kept out of the total
         $delivered = $this->postJson('/api/admin/orders', $this->payload(['rider_id' => $rider->id]))->json('id');
         $this->postJson('/api/admin/orders', $this->payload());                         // still received
@@ -330,15 +333,15 @@ class HomeDeliveryRiderTest extends TestCase
     {
         $id = $this->postJson('/api/admin/orders', ['type' => 'pickup', 'items' => $this->payload()['items']])->json('id');
 
-        $this->postJson("/api/admin/orders/$id/rider", ['rider_id' => $this->labour()->id])->assertUnprocessable();
+        $this->postJson("/api/admin/orders/$id/rider", ['rider_id' => $this->employee()->id])->assertUnprocessable();
     }
 
     public function test_riders_endpoint_lists_only_active_riders(): void
     {
-        $this->labour(['name' => 'Zain']);
-        $this->labour(['name' => 'Asad']);
-        $this->labour(['name' => 'Off Duty', 'status' => false]);
-        $this->labour(['name' => 'Chef', 'user_type' => 'cook']);
+        $this->employee(['name' => 'Zain']);
+        $this->employee(['name' => 'Asad']);
+        $this->employee(['name' => 'Off Duty', 'status' => false]);
+        $this->employee(['name' => 'Chef', 'user_type' => 'cook']);
 
         $this->getJson('/api/admin/riders')->assertOk()
             ->assertJsonCount(2)
@@ -347,9 +350,21 @@ class HomeDeliveryRiderTest extends TestCase
             ->assertJsonStructure([['id', 'name', 'phone']]);
     }
 
+    public function test_riders_endpoint_can_include_disabled_riders_for_the_list_filter(): void
+    {
+        $this->employee(['name' => 'Zain']);
+        $this->employee(['name' => 'Off Duty', 'status' => false]);
+        $this->employee(['name' => 'Chef', 'user_type' => 'cook']);
+
+        $this->getJson('/api/admin/riders?all=1')->assertOk()
+            ->assertJsonCount(2)
+            ->assertJsonPath('0.name', 'Off Duty')
+            ->assertJsonPath('1.name', 'Zain');
+    }
+
     public function test_search_matches_address_and_export_has_customer_and_rider(): void
     {
-        $rider = $this->labour();
+        $rider = $this->employee();
         $this->postJson('/api/admin/orders', $this->payload(['rider_id' => $rider->id, 'address' => 'House 7, Johar Town']));
         $this->postJson('/api/admin/orders', $this->payload(['address' => 'Model Town']));
 

@@ -8,16 +8,21 @@ use App\Http\Requests\AssignRiderRequest;
 use App\Http\Requests\StoreOrderRequest;
 use App\Http\Requests\UpdateOrderRequest;
 use App\Http\Requests\UpdateOrderStatusRequest;
+use App\Models\Customer;
 use App\Models\DeliveryArea;
-use App\Models\Labour;
+use App\Models\Employee;
 use App\Models\Order;
 use App\Services\DailyCloseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class OrderController extends Controller
 {
     use FiltersByDateRange;
+
+    /** every order status (same list as UpdateOrderStatusRequest); used by the list's ?status= filter */
+    private const STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'];
 
     private const CSV_MAP = ['RECEIVED' => 'PLACED', 'PREPARING' => 'PREPARING', 'READY' => 'PREPARING',
         'OUT_FOR_DELIVERY' => 'ON_THE_WAY', 'DELIVERED' => 'DELIVERED', 'CANCELLED' => 'CANCELLED'];
@@ -41,8 +46,23 @@ class OrderController extends Controller
                 ->when($request->query('type') === 'delivery', fn ($d) => $d->orWhere('address', 'like', "%{$s}%")));
         }
 
+        // ?from / ?to (created date, both inclusive) narrow both the list and the CSV export
+        $this->applyDateRange($q, $request);
+
+        // ?status=DELIVERED and ?rider_id=<id> | none (unassigned) column filters, list and export alike
+        $f = $request->validate([
+            'status' => ['nullable', Rule::in(self::STATUSES)],
+            'rider_id' => ['nullable', 'regex:/^(none|\d+)$/'],
+        ]);
+        if (! empty($f['status'])) {
+            $q->where('status', $f['status']);
+        }
+        if (! empty($f['rider_id'])) {
+            $f['rider_id'] === 'none' ? $q->whereNull('rider_id') : $q->where('rider_id', (int) $f['rider_id']);
+        }
+
         if ($request->query('export') === 'csv') {
-            $rows = $this->applyDateRange($q, $request)->orderByDesc('id')->get();
+            $rows = $q->orderByDesc('id')->get();
             $type = $request->query('type', 'website');
 
             return response()->streamDownload(function () use ($rows, $type) {
@@ -74,7 +94,7 @@ class OrderController extends Controller
         // charges come from the area record, never from the client
         $area = $delivery ? DeliveryArea::find($data['delivery_area_id']) : null;
         // rider name is a snapshot from the server record, like the area name
-        $rider = ($delivery && ! empty($data['rider_id'])) ? Labour::find($data['rider_id']) : null;
+        $rider = ($delivery && ! empty($data['rider_id'])) ? Employee::find($data['rider_id']) : null;
 
         $order = DB::transaction(function () use ($data, $area, $rider, $delivery) {
             // total is the order amount only; delivery charges are kept separately
@@ -96,6 +116,10 @@ class OrderController extends Controller
             $order->update(['order_number' => 'ON-'.$order->id]);
             foreach ($data['items'] as $i) {
                 $order->items()->create($i + ['product_id' => $i['product_id'] ?? null, 'deal_id' => $i['deal_id'] ?? null]);
+            }
+            // a first-time home delivery customer is saved for the phone lookup on the next order
+            if ($delivery) {
+                Customer::rememberFromOrder($data['customer_name'], $data['customer_phone'], $data['address'], $area?->id);
             }
 
             return $order;
@@ -273,7 +297,7 @@ class OrderController extends Controller
     /** rider_id + rider_name snapshot for a (validated) rider id, or both cleared */
     private function riderFields(?int $riderId): array
     {
-        $rider = $riderId ? Labour::find($riderId) : null;
+        $rider = $riderId ? Employee::find($riderId) : null;
 
         return ['rider_id' => $rider?->id, 'rider_name' => $rider?->name];
     }

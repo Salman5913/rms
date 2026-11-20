@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Labour;
+use App\Models\Employee;
 use Illuminate\Foundation\Http\FormRequest;
 
 /** admin walk-in orders (pickup / dinein / delivery) */
@@ -21,7 +21,7 @@ class StoreOrderRequest extends FormRequest
             'customer_name' => 'required_if:type,delivery|nullable|string|max:255',
             'customer_phone' => 'required_if:type,delivery|nullable|string|max:50',
             'address' => 'required_if:type,delivery|nullable|string|max:1000',
-            'rider_id' => ['nullable', 'integer', Labour::activeRiderRule()],
+            'rider_id' => ['nullable', 'integer', Employee::activeRiderRule()],
             'delivery_area_id' => 'required_if:type,delivery|nullable|integer|exists:delivery_areas,id,status,1',
             'notes' => 'nullable|string',
             'items' => 'required|array|min:1',

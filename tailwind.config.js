@@ -14,6 +14,16 @@ export default {
                     800: "#323B94",
                 },
             },
+            // progress bar of the GearLoader in ui.jsx: fills left to right, holds, then restarts
+            keyframes: {
+                "loader-bar": {
+                    "0%": { transform: "scaleX(0)" },
+                    "70%, 100%": { transform: "scaleX(1)" },
+                },
+            },
+            animation: {
+                "loader-bar": "loader-bar 2.4s ease-in-out infinite",
+            },
         },
     },
     plugins: [],

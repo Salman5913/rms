@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../api";
 import { useAuth } from "../auth";
 import { useDialog } from "../Dialog";
-import { Btn, Field, Modal, Pagination, Spinner, inputCls } from "../ui";
+import { Btn, DatePicker, Field, Modal, Pagination, Spinner, StatusText, TableBody, inputCls, useLoading } from "../ui";
 import { formatDateTime, localToday } from "../utils";
 
 const MODULE = "daily-close";
@@ -36,19 +36,24 @@ function printDailyClose(d, ticked) {
     const money2 = (v) => `Rs. ${money(v)}`;
     const head = (t) => `<hr/><div class="bold" style="margin-bottom:4px;">${t}</div>`;
     const parts = [];
+    // total sales with the counted orders, written like the type rows: "Pickup (3)"
+    const totalSalesRow = () => row(`TOTAL SALES (${s.orders_counted})`, money2(s.total_sales), "total-row");
 
     // print order: item-wise sales, sales by type, total sales, (cancelled), delivery charges last
+    // (total sales follows the item list instead when sales by type is not ticked)
     if (ticked.items) {
         parts.push(head("ITEM-WISE SALES") + (s.items.length
             ? `<table><tbody>${s.items.map((i) => `<tr><td style="padding:2px 0;">${esc(i.name)}</td><td style="text-align:right;padding:2px 4px;">${i.qty}</td><td class="amt" style="text-align:right;padding:2px 0;">${money(i.amount)}</td></tr>`).join("")}</tbody></table>`
-            : "<div>No items</div>"));
+            : "<div>No items</div>")
+            // total sales normally closes the sales-by-type block; without it, close the item list with it
+            + (ticked.sales ? "" : totalSalesRow()));
     }
     if (ticked.sales) {
         parts.push(head("SALES BY ORDER TYPE")
             // website / home delivery: short name on the row, the delivered rule on a small second line
             + s.sales_by_type.map((t) => row(`${PRINT_TYPE[t.type] ?? t.label} (${t.orders})`, money2(t.amount), "summary-row",
                 ["website", "delivery"].includes(t.type) ? "delivered only" : "")).join("")
-            + row("TOTAL SALES", money2(s.total_sales), "total-row"));
+            + totalSalesRow());
     }
     if (ticked.cancelled) {
         parts.push(head("CANCELLED ORDERS") + s.cancelled.map((c) => row(`${c.label} (${c.orders})`, money2(c.amount))).join(""));
@@ -193,9 +198,10 @@ export default function DailyClose() {
     const [form, setForm] = useState({ cash_counted: "", notes: "", reason: "" });
     const [saving, setSaving] = useState(false);
     const [history, setHistory] = useState(null);
+    const [historyLoading, trackHistory] = useLoading();
 
     const load = (dt = date) => api.get("/admin/daily-close", { params: { date: dt } }).then((r) => setD(r.data));
-    const loadHistory = (p = 1) => api.get("/admin/daily-closes", { params: { page: p } }).then((r) => setHistory(r.data));
+    const loadHistory = (p = 1) => trackHistory(api.get("/admin/daily-closes", { params: { page: p } }).then((r) => setHistory(r.data)));
 
     useEffect(() => { setD(null); load(date); }, [date]); // eslint-disable-line
     useEffect(() => { loadHistory(1); }, []);
@@ -250,8 +256,7 @@ export default function DailyClose() {
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
                     <h2 className="text-xl font-extrabold text-slate-800">Daily Close</h2>
-                    <input type="date" value={date} max={localToday()} onChange={(e) => e.target.value && setDate(e.target.value)}
-                        className="border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+                    <DatePicker value={date} max={localToday()} onChange={(v) => v && setDate(v)} className="w-48" />
                     <StatusBadge d={d} />
                 </div>
                 <div className="flex gap-2">
@@ -376,7 +381,7 @@ export default function DailyClose() {
             {/* history */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                 <h3 className="font-bold text-slate-700 mb-3">Close history</h3>
-                {!history ? <Spinner /> : (
+                {!history ? <Spinner inline /> : (
                     <>
                         <table className="w-full text-sm">
                             <thead>
@@ -388,7 +393,7 @@ export default function DailyClose() {
                                     <th className="py-2 font-semibold">Status</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <TableBody loading={historyLoading} cols={5}>
                                 {history.data.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-slate-300">No days closed yet</td></tr>}
                                 {history.data.map((h) => (
                                     <tr key={h.id} onClick={() => setDate(h.business_date)}
@@ -397,10 +402,10 @@ export default function DailyClose() {
                                         <td className="py-2 text-right">{rs(h.total_sales)}</td>
                                         <td className="py-2">{h.closed_by?.name ?? "—"}</td>
                                         <td className="py-2">{formatDateTime(h.closed_at)}</td>
-                                        <td className="py-2">{h.status === "closed" ? "✅ Closed" : "🔓 Reopened"}</td>
+                                        <td className="py-2"><StatusText on={h.status === "closed"} onText="Closed" offText="Reopened" offClass="text-sky-600" /></td>
                                     </tr>
                                 ))}
-                            </tbody>
+                            </TableBody>
                         </table>
                         <Pagination data={history} onPage={loadHistory} />
                     </>

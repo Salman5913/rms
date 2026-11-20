@@ -30,6 +30,7 @@ abstract class ApiCrudController extends Controller
     {
         $q = $this->model::query()->with($this->with);
         $this->filter($q, $request);
+        $this->filterStatus($q, $request);
 
         if ($s = $request->query('search')) {
             $q->where(function ($qq) use ($s) {
@@ -109,6 +110,18 @@ abstract class ApiCrudController extends Controller
 
     /** extra list filters from the query string (none by default) */
     protected function filter($query, Request $request): void {}
+
+    /** ?status=1 (active) / ?status=0 (disabled) for every model with a status column; list and export alike */
+    protected function filterStatus($query, Request $request): void
+    {
+        if (! in_array('status', (new $this->model)->getFillable(), true)) {
+            return;
+        }
+        $status = $request->validate(['status' => ['nullable', 'boolean']])['status'] ?? null;
+        if ($status !== null) {
+            $query->where($query->getModel()->getTable().'.status', (bool) $status);
+        }
+    }
 
     /** pick only fillable fields present in validated data */
     protected function fields(array $data): array

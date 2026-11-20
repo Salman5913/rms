@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Route, Routes } from "react-router-dom";
-import { CrudPage, CrudForm } from "../Crud";
+import { CrudPage, CrudForm, STATUS_FILTER } from "../Crud";
 import api from "../api";
-import { Select } from "../ui";
+import { Select, StatusText } from "../ui";
 
 function RolesSelect({ value, onChange, disabled }) {
     const [roles, setRoles] = useState([]);
@@ -19,7 +19,7 @@ const columns = [
     { key: "name", label: "User Name" },
     { key: "email", label: "Email" },
     { key: "role", label: "Role", render: (r) => r.role?.name ?? "—" },
-    { key: "status", label: "Status", render: (r) => (r.status ? "✅ Active" : "⛔ Disabled") },
+    { key: "status", label: "Status", filter: STATUS_FILTER, render: (r) => <StatusText on={r.status} /> },
 ];
 
 export default function Users() {

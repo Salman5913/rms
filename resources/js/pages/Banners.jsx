@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../api";
-import { Btn } from "../ui";
+import { Btn, Spinner } from "../ui";
 
 /** Single page create+update: multi upload, drag to reorder, ✕ to remove, save disabled until changes. */
 export default function Banners() {
     const [banners, setBanners] = useState(null);
+    const [error, setError] = useState("");
     const [staged, setStaged] = useState([]); // new uploads {id:null, image, local preview}
     const [dirty, setDirty] = useState(false);
     const dragIndex = useRef(null);
     const fileRef = useRef();
 
-    const load = () => api.get("/admin/banners").then((r) => setBanners(r.data));
+    const load = () => api.get("/admin/banners")
+        .then((r) => { setBanners(r.data); setError(""); })
+        .catch((err) => setError(err.response?.data?.message ?? "The banners could not be loaded."));
     useEffect(() => { load(); }, []);
 
-    if (!banners) return null;
+    if (!banners) return error ? <p className="text-sm text-red-600">{error}</p> : <Spinner />;
 
     const all = [...banners, ...staged];
 
